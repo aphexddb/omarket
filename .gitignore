@@ -4,6 +4,13 @@
 /sharewared
 /omarket
 /sharewarectl
+/hello-shareware
+
+# makepkg
+*.pkg.tar.zst
+*.pkg.tar.xz
+examples/hello-shareware/pkg/
+examples/hello-shareware/src/
 
 # state
 *.db
