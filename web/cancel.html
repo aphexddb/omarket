@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>omarchy-shareware — checkout canceled</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --bg-alt: #20212e;
+    --fg: #c0caf5;
+    --fg-dim: #7982a9;
+    --accent: #7aa2f7;
+    --green: #9ece6a;
+    --yellow: #e0af68;
+    --red: #f7768e;
+    --border: #2f3146;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--mono);
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+
+  .card {
+    max-width: 560px;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-alt);
+    box-shadow: 0 10px 40px -12px #00000080;
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    background: #16171f;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: var(--red); }
+  .dot.y { background: var(--yellow); }
+  .dot.g { background: var(--green); }
+
+  .terminal-title {
+    margin-left: 0.5rem;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+  }
+
+  .body {
+    padding: 2rem 1.8rem 2.2rem;
+    text-align: center;
+  }
+
+  .mark {
+    color: var(--yellow);
+    font-size: 2.4rem;
+    line-height: 1;
+    margin-bottom: 0.8rem;
+  }
+
+  h1 {
+    font-size: 1.3rem;
+    margin: 0 0 0.6rem;
+    color: var(--fg);
+  }
+
+  p {
+    color: var(--fg-dim);
+    margin: 0.4rem 0;
+    line-height: 1.6;
+  }
+
+  .cmd {
+    display: inline-block;
+    margin-top: 1.4rem;
+    background: #16171f;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 1rem;
+    color: var(--yellow);
+    font-size: 0.95rem;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .back {
+    display: block;
+    margin-top: 1.8rem;
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="terminal-bar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="terminal-title">omarket</span>
+    </div>
+    <div class="body">
+      <div class="mark">&#8213;</div>
+      <h1>No charge</h1>
+      <p>Checkout was canceled. Nothing was billed.</p>
+      <p>The trial never expires anyway — keep using the app, buy a key whenever you're ready.</p>
+      <div class="cmd">$ omarket buy &lt;app&gt;</div>
+      <a class="back" href="/">&larr; back to the catalog</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,47 @@
+# release.yml — copy to .github/workflows/release.yml in your app's repo.
+#
+# On a version tag push (v1.0.0, v1.2.3, ...): build the Go binary, run
+# makepkg inside an archlinux container to produce a real Arch package, and
+# attach it to a GitHub release. Requires a PKGBUILD at the repo root — see
+# packaging/PKGBUILD.template.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel go git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: makepkg needs a non-root user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Build package
+        run: |
+          su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+          su builder -c 'makepkg -s --noconfirm'
+
+      - name: Locate package artifact
+        id: pkg
+        run: echo "path=$(ls -- *.pkg.tar.zst | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.pkg.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

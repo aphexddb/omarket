@@ -1,0 +1,14 @@
+{
+  "id": "hello-shareware",
+  "name": "Hello Shareware",
+  "description": "The demo app: proves the try-then-buy loop end to end.",
+  "version": "1.0.0",
+  "homepage": "https://github.com/aphexddb/omarchy-shareware",
+  "source": "https://github.com/aphexddb/omarchy-shareware/tree/master/examples/hello-shareware",
+  "pkgname": "hello-shareware",
+  "price_cents": 500,
+  "currency": "usd",
+  "stripe_account": "acct_REPLACE_ME",
+  "kind": "source-included",
+  "tags": ["demo", "example"]
+}

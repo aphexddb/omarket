@@ -1,0 +1,14 @@
+# binaries
+/bin/
+*.exe
+/sharewared
+/omarket
+/sharewarectl
+
+# state
+*.db
+.env
+
+# editor
+.idea/
+.vscode/
