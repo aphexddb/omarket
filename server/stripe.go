@@ -96,6 +96,12 @@ func (c *liveStripeClient) CreateCheckoutSession(p checkoutParams) (string, erro
 func (c *liveStripeClient) CreateExpressAccount(email string) (string, error) {
 	params := &stripe.AccountParams{
 		Type: stripe.String(string(stripe.AccountTypeExpress)),
+		// Destination charges require the connected account to have the
+		// transfers capability; onboarding only collects what's requested.
+		Capabilities: &stripe.AccountCapabilitiesParams{
+			CardPayments: &stripe.AccountCapabilitiesCardPaymentsParams{Requested: stripe.Bool(true)},
+			Transfers:    &stripe.AccountCapabilitiesTransfersParams{Requested: stripe.Bool(true)},
+		},
 	}
 	if email != "" {
 		params.Email = stripe.String(email)
