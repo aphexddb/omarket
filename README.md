@@ -66,6 +66,14 @@ Single Go module: `github.com/aphexddb/omarchy-shareware`.
 go build ./...
 ```
 
+Version lives in [`VERSION`](VERSION). Tag `v$(cat VERSION)` and push to cut a
+GitHub release via GoReleaser (`.github/workflows/release.yml`). Pushes and PRs
+build a snapshot in CI. Test that workflow locally with `act`:
+
+```bash
+act pull_request -W .github/workflows/ci.yml -j build
+```
+
 ## Docs
 
 - [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md) — get paid in 10 minutes

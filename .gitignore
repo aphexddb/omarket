@@ -4,6 +4,8 @@
 /sharewared
 /omarket
 /sharewarectl
+/hello-shareware
+dist/
 
 # state
 *.db

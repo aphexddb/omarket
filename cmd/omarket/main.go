@@ -6,6 +6,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/aphexddb/omarchy-shareware/internal/version"
 )
 
 func main() {
@@ -33,6 +35,9 @@ func run(args []string) error {
 		return runLicenses(args[1:])
 	case "dev":
 		return runDev(args[1:])
+	case "version", "-v", "--version":
+		fmt.Println(version.String())
+		return nil
 	case "-h", "--help", "help":
 		usage()
 		return nil
@@ -51,6 +56,7 @@ func usage() {
   omarket buy <app> [-email x]
   omarket licenses
   omarket dev onboard -email x
+  omarket version
 
   all subcommands accept -server <url> to override the configured server`)
 }

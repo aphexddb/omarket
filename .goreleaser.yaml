@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: omarchy-shareware
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: omarket
+    main: ./cmd/omarket
+    binary: omarket
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
+
+  - id: sharewarectl
+    main: ./cmd/sharewarectl
+    binary: sharewarectl
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
+
+  - id: sharewared
+    main: ./cmd/sharewared
+    binary: sharewared
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE.md
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+snapshot:
+  version_template: "{{ .Version }}-next"
+
+release:
+  name_template: "v{{ .Version }}"
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

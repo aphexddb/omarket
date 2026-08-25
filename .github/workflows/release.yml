@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.26.6"
+  GORELEASER_VERSION: "v2.18.0"
+
+jobs:
+  goreleaser:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check VERSION matches tag
+        run: |
+          file=$(tr -d '[:space:]' < VERSION)
+          tag=${GITHUB_REF_NAME#v}
+          if [ "$file" != "$tag" ]; then
+            echo "VERSION file ($file) does not match git tag ($tag)" >&2
+            exit 1
+          fi
+
+      - name: Install Go
+        run: |
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
+          mkdir -p "$HOME/.local"
+          rm -rf "$HOME/.local/go"
+          tar -C "$HOME/.local" -xzf /tmp/go.tgz
+          echo "$HOME/.local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install GoReleaser
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/goreleaser/goreleaser/releases/download/${GORELEASER_VERSION}/goreleaser_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" goreleaser
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: GoReleaser
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release --clean

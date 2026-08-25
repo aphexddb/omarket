@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    tags-ignore:
+      - "v*.*.*"
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.6"
+  GORELEASER_VERSION: "v2.18.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read VERSION
+        id: version
+        run: |
+          test -s VERSION
+          v=$(tr -d '[:space:]' < VERSION)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=v$v" >> "$GITHUB_OUTPUT"
+
+      - name: Install Go
+        run: |
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
+          mkdir -p "$HOME/.local"
+          rm -rf "$HOME/.local/go"
+          tar -C "$HOME/.local" -xzf /tmp/go.tgz
+          echo "$HOME/.local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install GoReleaser
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/goreleaser/goreleaser/releases/download/${GORELEASER_VERSION}/goreleaser_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" goreleaser
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Test
+        run: go test ./...
+
+      - name: GoReleaser snapshot
+        env:
+          GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release --snapshot --clean
