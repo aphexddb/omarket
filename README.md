@@ -7,8 +7,10 @@ Paying unlocks an offline, Ed25519-signed license key — no phone-home, no DRM,
 no accounts. The platform takes a flat 5% via Stripe Connect and eats Stripe's
 processing fees out of that cut. Devs net 95%. One number.
 
-This is a community project. It has no affiliation with Omarchy, Basecamp, or
-37signals — it's just built for people who live in that terminal.
+The canonical instance lives at [omarchyshareware.com](https://omarchyshareware.com) —
+`omarket` points there by default. The code is MIT; run your own instance if
+you'd rather. This is a community project with no affiliation with Omarchy,
+Basecamp, or 37signals — it's just built for people who live in that terminal.
 
 ## Why not an app store
 

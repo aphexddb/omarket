@@ -29,7 +29,7 @@ Express onboarding.
 
 - **Developers → API keys**: copy the Secret key → `STRIPE_SECRET_KEY`.
 - **Developers → Webhooks → Add endpoint**:
-  - URL: `https://<your-domain>/stripe/webhook`
+  - URL: `https://omarchyshareware.com/stripe/webhook`
   - Events: just `checkout.session.completed`
   - Regular account events, **not** "Connect application" events.
   - Copy the Signing secret → `STRIPE_WEBHOOK_SECRET`.

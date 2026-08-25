@@ -171,7 +171,8 @@ Storage: bbolt, bucket `purchases`, key = token, value = JSON record. No account
 ## 4. Client (`omarket`)
 
 Config dir: `os.UserConfigDir()/shareware/` → `config.json` (`{"server":"https://..."}`,
-default server `http://localhost:8484`, overridable with `--server` / `OMARKET_SERVER`),
+default server `https://omarchyshareware.com` (the canonical instance), overridable
+with `--server` / `OMARKET_SERVER`),
 licenses in `licenses/<app>.key`.
 
 Subcommands (stdlib `flag`, no cobra):

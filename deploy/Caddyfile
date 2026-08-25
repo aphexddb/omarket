@@ -1,0 +1,14 @@
+omarchyshareware.com {
+	reverse_proxy localhost:8484
+
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+www.omarchyshareware.com {
+	redir https://omarchyshareware.com{uri} permanent
+}
