@@ -16,9 +16,13 @@ import (
 const appID = "hello-shareware"
 
 // platformPublicKey is the platform's Ed25519 public key, base64 std-encoded
-// (license.DecodePublicKey). This is a placeholder — the real build embeds
-// the operator's actual key.
-const platformPublicKey = "REPLACE_WITH_PLATFORM_PUBLIC_KEY_BASE64"
+// (license.DecodePublicKey). Override at build time:
+//
+//	go build -ldflags "-X main.platformPublicKey=$PUBLIC" ./examples/hello-shareware
+//
+// The placeholder is intentionally invalid so an unconfigured build falls
+// through to "unregistered."
+var platformPublicKey = "REPLACE_WITH_PLATFORM_PUBLIC_KEY_BASE64"
 
 const banner = `
  _          _ _         _
