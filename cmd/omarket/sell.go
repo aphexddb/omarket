@@ -277,7 +277,38 @@ func runSellClaim(args []string) error {
 
 	fmt.Println(successStyle.Render("Claimed " + app.ID))
 	fmt.Printf("Generated %s — edit it, then run `omarket sell push`.\n", client.ManifestFilename)
+	if author := client.GitAuthor(); author != "" {
+		fmt.Println(mutedStyle.Render("Pre-filled author from git config: " + author))
+	}
+	printWareSuggestions()
 	return nil
+}
+
+// printWareSuggestions shows the "-ware" traditions a seller might pick for
+// the manifest's ware field. It's a list of ideas, not a menu: the field is
+// free-form, and inventing a new one is squarely in the spirit of it.
+func printWareSuggestions() {
+	fmt.Println()
+	fmt.Println(headingStyle.Render("Pick your ware"))
+	fmt.Println(mutedStyle.Render(fmt.Sprintf(
+		"The %q field says what your app asks of people. Anything goes (%d chars max) —",
+		"ware", client.MaxWareLen)))
+	fmt.Println(mutedStyle.Render("these are just the well-worn ones:"))
+	fmt.Println()
+	for _, w := range client.WareSuggestions {
+		fmt.Printf("  %s  %s\n", wareNameStyle.Render(pad(w.Name, 14)), mutedStyle.Render(w.Blurb))
+	}
+	fmt.Println()
+	fmt.Println(mutedStyle.Render(`Then say it in "comment", e.g. "Buy me a beer if you like this tool. Cheers!"`))
+}
+
+// pad right-pads s to width so the blurbs line up. Names are plain ASCII
+// slugs, so a byte count is a column count here.
+func pad(s string, width int) string {
+	for len(s) < width {
+		s += " "
+	}
+	return s
 }
 
 func runSellPush(args []string) error {

@@ -21,4 +21,8 @@ var (
 	errorStyle    = lipgloss.NewStyle().Foreground(colorRed)
 	fgStyle       = lipgloss.NewStyle().Foreground(colorFg)
 	ownedBadge    = lipgloss.NewStyle().Bold(true).Foreground(colorBg).Background(colorGreen).Padding(0, 1)
+
+	headingStyle  = lipgloss.NewStyle().Bold(true).Foreground(colorFg)
+	wareNameStyle = lipgloss.NewStyle().Foreground(colorGreen)
+	wareBadge     = lipgloss.NewStyle().Foreground(colorAccent)
 )

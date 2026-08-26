@@ -90,8 +90,7 @@ func (c *Client) ClaimApp(ctx context.Context, sellerToken, id string) (AppPubli
 }
 
 // PushApp updates a claimed app's listing details: PUT /api/apps/{id}. Only
-// the editable fields (name, description, homepage, price) are sent; the id
-// is not part of the request body.
+// the editable fields are sent; the id is not part of the request body.
 func (c *Client) PushApp(ctx context.Context, sellerToken string, m Manifest) (AppPublic, error) {
 	var out AppPublic
 	body := map[string]any{
@@ -99,6 +98,9 @@ func (c *Client) PushApp(ctx context.Context, sellerToken string, m Manifest) (A
 		"description":     m.Description,
 		"homepage":        m.Homepage,
 		"price_usd_cents": m.PriceUSDCents,
+		"ware":            WareOrDefault(m.Ware),
+		"comment":         m.Comment,
+		"author":          m.Author,
 	}
 	path := "/api/apps/" + url.PathEscape(m.ID)
 	if err := c.doJSONAuth(ctx, http.MethodPut, path, sellerToken, body, &out); err != nil {

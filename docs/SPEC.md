@@ -103,12 +103,23 @@ Curation is a pull request. The server loads the directory at boot
   "currency": "usd",
   "stripe_account": "acct_XXX",
   "kind": "source-included",
+  "ware": "shareware",
+  "comment": "Try it free. Buy a key if you keep it around.",
+  "author": "aphexddb",
   "tags": ["demo"]
 }
 ```
 
 - `price_cents: 0` — free; no buy flow.
-- `kind`: `"source-included"` (featured tier) or `"closed"`.
+- `kind`: `"source-included"` (featured tier) or `"closed"`. This is the
+  distribution tier, a separate axis from `ware`.
+- `ware`: the "-ware" tradition the listing follows — `"shareware"`,
+  `"beerware"`, `"coffeeware"`, `"charityware"`, and so on. Free-form, not
+  an enum; max 64 chars, defaults to `"shareware"` when empty.
+- `comment`: required, 3–140 chars. The one-line ask that goes with the
+  `ware`, e.g. `"Buy me a beer if you like this tool. Cheers!"`.
+- `author`: required, max 64 chars. Author handle, typically a GitHub
+  username, stored bare (`aphexddb`, no `@`).
 - `stripe_account`: the dev's Stripe Connect account id. Required when
   `price_cents > 0`.
 - `pkgname`: Arch package name. `omarket install` runs
@@ -142,7 +153,8 @@ omarket version              # print the version
 
 `omarket list`, `omarket info <app>`, and `omarket install <app>` still work
 but are no longer advertised in `omarket -h`: `list` is `buy` with no
-arguments, and `info`/`install` are reachable from the TUI.
+arguments, and `info`/`install` are reachable from the TUI. `list` carries a
+WARE column; `info` shows `ware`, `author`, and the `comment`.
 
 `GET /api/pubkey` -> `200 {"public_key","key_id","fingerprint","keys":[{"key_id","algorithm","public_key","fingerprint"}]}`.
 
@@ -181,27 +193,58 @@ POST /api/sellers/payouts                  (Bearer, empty JSON body)
                                             Stripe configured
 POST /api/apps                             (Bearer) {"id": "my-app-name"}
                                             -> 201 AppPublic; 409 if taken/reserved; 400 invalid
-PUT  /api/apps/{id}                        (Bearer, owner) {"name","description","homepage","price_usd_cents"}
-                                            -> 200 AppPublic
+PUT  /api/apps/{id}                        (Bearer, owner) {"name","description","homepage","price_usd_cents","ware","comment","author"}
+                                            -> 200 AppPublic; 400 invalid field
+                                            ("comment" and "author" are
+                                            required; "ware" defaults to
+                                            "shareware")
 POST /api/apps/{id}/test-license           (Bearer, owner) -> 200 {"license_key": "SHRW1..."} (license kind "test")
 ```
 
-`AppPublic = {"id","name","description","homepage","price_usd_cents","listed"}`.
+`AppPublic = {"id","name","description","homepage","price_usd_cents","listed","ware","comment","author"}`.
+
+Field limits, shared with §2: `ware` max 64 chars (optional), `comment`
+3–140 chars (required), `author` max 64 chars (required).
 
 App id rule: `^[a-z0-9-]{3,64}$`, no leading or trailing hyphen. The server
 also enforces a reserved-names list.
 
 Error responses: `{"error": "message"}`, matching §3's convention.
 
-Setting an app's `listed` flag — curation — is done by the platform
-operator with private tooling. It is not exposed in this CLI.
+Curation — setting an app's `listed` flag, publishing platform-owned
+listings, soft-deleting an app, minting a license server-side — is done by
+the platform operator against `/api/admin/*` with private tooling, gated on
+a server-side admin token. None of it is exposed in this CLI, so it is out
+of scope for this spec; the platform repo documents it. One effect is
+visible here: a soft-deleted app is filtered out of every read path above,
+including `GET /api/catalog`, `GET /api/apps/{id}`, `POST /api/buy`, and
+`GET /api/sellers/me`.
+
+The `omarket.json` manifest `omarket sell claim` writes, and `omarket sell
+push` reads:
+
+```json
+{
+  "id": "my-app-name",
+  "name": "My App Name",
+  "description": "One line about what your app does",
+  "homepage": "https://example.com",
+  "price_usd_cents": 500,
+  "ware": "shareware",
+  "comment": "What you ask of people who use it",
+  "author": "aphexddb"
+}
+```
 
 ```
 omarket sell init            # POST /api/sellers (or GET /api/sellers/me if
                              # already initialized); saves seller_token.
                              # No Stripe involved.
 omarket sell claim <app-id>  # POST /api/apps; writes a template
-                             # omarket.json manifest to the cwd
+                             # omarket.json manifest to the cwd. Prints the
+                             # ware suggestion list and pre-fills author
+                             # from git config (github.user, then
+                             # user.email)
 omarket sell push            # reads ./omarket.json; PUT /api/apps/{id}.
                              # Refuses to push while template placeholder
                              # values remain. If the pushed price is > 0 and

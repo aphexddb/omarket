@@ -50,10 +50,16 @@ server with `-server` or `OMARKET_SERVER`.
 ```bash
 omarket sell init            # create a seller account; token written to disk
 omarket sell claim my-app    # claim the id; generates an omarket.json manifest
-omarket sell push            # upload name, description, price from omarket.json
+omarket sell push            # upload name, description, price, ware from omarket.json
 omarket sell testkey         # mint a test license; your app shows registered
 omarket sell payouts         # Stripe Express onboarding, when you want to get paid
 ```
+
+The manifest carries `ware` — the "-ware" tradition your listing follows
+(`shareware`, `beerware`, `coffeeware`, `charityware`, or one you invent) —
+plus the one-line `comment` that says what you're asking for and the
+`author` handle, pre-filled from your git config. `comment` and `author` are
+required; `ware` defaults to `shareware`.
 
 `push` refuses a manifest that still has template values. A pushed app is
 buyable by exact name immediately; the browse catalog is curated by the
