@@ -1,10 +1,10 @@
-# Deploying the canonical instance (omarchyshareware.com)
+# Deploying the canonical instance (omarket.dev)
 
 One small VPS, one binary, Caddy in front. No database server, no containers.
 
 ## 0. DNS
 
-Point `A`/`AAAA` records for `omarchyshareware.com` (and `www`) at the VPS.
+Point `A`/`AAAA` records for `omarket.dev` (and `www`) at the VPS.
 
 ## 1. Build
 
@@ -24,9 +24,7 @@ sudo chown -R shareware:shareware /srv/shareware
 sudo chmod 600 /srv/shareware/.env
 ```
 
-`.env` (see `.env.example`): `BASE_URL=https://omarchyshareware.com`, live
-Stripe keys, and the production `PLATFORM_SIGNING_KEY`. Keep an offline backup
-of the signing keypair — it cannot be rotated without stranding issued licenses.
+`.env` (see `.env.example`): `BASE_URL=https://omarket.dev`, live Stripe keys, and the production `PLATFORM_SIGNING_KEY`. Keep an offline backup of the signing keypair — it cannot be rotated without stranding issued licenses.
 
 ## 3. systemd + Caddy
 
@@ -41,22 +39,17 @@ Caddy terminates TLS (automatic certificates) and proxies to `:8484`.
 
 ## 4. Stripe webhook (live mode)
 
-Dashboard → Developers → Webhooks → Add endpoint:
-`https://omarchyshareware.com/stripe/webhook`, event
-`checkout.session.completed`. Put the live `whsec_...` in `.env` and
-`sudo systemctl restart sharewared`.
+Dashboard → Developers → Webhooks → Add endpoint: `https://omarket.dev/stripe/webhook`, event `checkout.session.completed`. Put the live `whsec_...` in `.env` and `sudo systemctl restart sharewared`.
 
 ## 5. Verify
 
 ```bash
-curl https://omarchyshareware.com/healthz
-curl https://omarchyshareware.com/catalog.json
+curl https://omarket.dev/healthz
+curl https://omarket.dev/catalog.json
 ```
 
 Then one real end-to-end purchase (smallest listed app) before announcing.
 
 ## Updating the catalog
 
-Catalog changes are merged via PR, then synced to the server (rsync the
-`catalog/` dir, restart sharewared). Automating that with a GitHub Action
-deploy hook is the natural next step once listings pick up.
+Catalog changes are merged via PR, then synced to the server (rsync the `catalog/` dir, restart sharewared). Automating that with a GitHub Action deploy hook is the natural next step once listings pick up.

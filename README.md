@@ -2,25 +2,16 @@
 
 Shareware for the terminal age.
 
-Devs ship real Arch packages. Users try everything, free, forever if they want.
-Paying unlocks an offline, Ed25519-signed license key — no phone-home, no DRM,
-no accounts. The platform takes a flat 5% via Stripe Connect and eats Stripe's
-processing fees out of that cut. Devs net 95%. One number.
+Devs ship real Arch packages. Users try everything, free, forever if they want. Paying unlocks an offline, Ed25519-signed license key — no phone-home, no DRM, no accounts. The platform takes a flat 5% via Stripe Connect and eats Stripe's processing fees out of that cut. Devs net 95%. One number.
 
-The canonical instance lives at [omarchyshareware.com](https://omarchyshareware.com) —
-`omarket` points there by default. The code is MIT; run your own instance if
-you'd rather. This is a community project with no affiliation with Omarchy,
-Basecamp, or 37signals — it's just built for people who live in that terminal.
+The canonical instance lives at [omarket.dev](https://omarket.dev) — `omarket` points there by default. The code is MIT; run your own instance if you'd rather. This is a community project with no affiliation with Omarchy, Basecamp, or 37signals — it's just built for people who live in that terminal.
 
 ## Why not an app store
 
 - **5% flat.** No tiers, no "featured placement" upsell, no 30% toll.
-- **No gatekeeping.** No review queue. Curation happens via pull request against
-  `catalog/`, same as any other patch.
-- **Offline keys.** A license is a signed string you can verify with nothing but
-  a public key and stdlib crypto. It works with the network off.
-- **Source-included by default.** Listings that ship source get featured. This
-  isn't a walled garden; it's shareware.
+- **No gatekeeping.** No review queue. Curation happens via pull request against `catalog/`, same as any other patch.
+- **Offline keys.** A license is a signed string you can verify with nothing but a public key and stdlib crypto. It works with the network off.
+- **Source-included by default.** Listings that ship source get featured. This isn't a walled garden; it's shareware.
 
 ## Quickstart: users
 
@@ -35,11 +26,8 @@ Licenses land in `~/.config/shareware/licenses/<app>.key`. Nothing to log into.
 
 ## Quickstart: devs
 
-1. `omarket dev onboard -email you@example.com` — spins up a Stripe Express
-   account, hands you an onboarding URL. Takes a few minutes.
-2. Package your app: an Arch `PKGBUILD` (start from
-   `packaging/PKGBUILD.template`) plus, optionally, a license check (three
-   ways to do it, honor system included — see `docs/DEVELOPERS.md`).
+1. `omarket dev onboard -email you@example.com` — spins up a Stripe Express account, hands you an onboarding URL. Takes a few minutes.
+2. Package your app: an Arch `PKGBUILD` (start from `packaging/PKGBUILD.template`) plus, optionally, a license check (three ways to do it, honor system included — see `docs/DEVELOPERS.md`).
 3. Add `catalog/<id>.json` and open a PR. That's the review process.
 
 See `docs/DEVELOPERS.md` for the full walkthrough, including the money math.

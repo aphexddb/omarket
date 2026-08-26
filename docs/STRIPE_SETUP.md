@@ -17,19 +17,15 @@ Sidebar → **Connect** → Get started. Answers that match how sharewared works
 - You are a **platform/marketplace**.
 - You collect payments and **pay out to others**.
 - Account type: **Express**.
-- The platform sets pricing; charges are **destination charges** (the platform
-  is the merchant of record and pays Stripe's processing fees — that's why the
-  5% application fee is all-in for devs).
+- The platform sets pricing; charges are **destination charges** (the platform is the merchant of record and pays Stripe's processing fees — that's why the 5% application fee is all-in for devs).
 
-Complete the platform profile and accept the Connect agreement. Then
-Settings → Connect → **Branding**: set the name and icon devs see during
-Express onboarding.
+Complete the platform profile and accept the Connect agreement. Then Settings → Connect → **Branding**: set the name and icon devs see during Express onboarding.
 
 ## 2. Keys and webhook
 
 - **Developers → API keys**: copy the Secret key → `STRIPE_SECRET_KEY`.
 - **Developers → Webhooks → Add endpoint**:
-  - URL: `https://omarchyshareware.com/stripe/webhook`
+  - URL: `https://omarket.dev/stripe/webhook`
   - Events: just `checkout.session.completed`
   - Regular account events, **not** "Connect application" events.
   - Copy the Signing secret → `STRIPE_WEBHOOK_SECRET`.
@@ -51,8 +47,7 @@ stripe listen --forward-to localhost:8484/stripe/webhook
 go run ./cmd/sharewarectl keygen
 ```
 
-`PRIVATE=...` → `PLATFORM_SIGNING_KEY` in `.env`. Store the pair somewhere
-durable and secret; the private key is the business.
+`PRIVATE=...` → `PLATFORM_SIGNING_KEY` in `.env`. Store the pair somewhere durable and secret; the private key is the business.
 
 ## 4. Test the whole loop
 
@@ -61,20 +56,11 @@ cp .env.example .env   # fill in the three secrets
 go build -o sharewared ./cmd/sharewared && ./sharewared   # or: source .env first
 ```
 
-1. `omarket dev onboard -email you@example.com` — complete the test-mode
-   Express onboarding (Stripe prefills everything in test mode).
-2. Put the resulting `acct_...` into `catalog/hello-shareware.json` as
-   `stripe_account`, restart sharewared.
-3. `omarket buy hello-shareware` — open the checkout URL, pay with the test
-   card `4242 4242 4242 4242` (any future expiry, any CVC).
-4. The poll completes, the license key lands in
-   `~/.config/shareware/licenses/hello-shareware.key`, and the Payments page
-   of the dashboard shows the charge with a 5% application fee.
+1. `omarket dev onboard -email you@example.com` — complete the test-mode Express onboarding (Stripe prefills everything in test mode).
+2. Put the resulting `acct_...` into `catalog/hello-shareware.json` as `stripe_account`, restart sharewared.
+3. `omarket buy hello-shareware` — open the checkout URL, pay with the test card `4242 4242 4242 4242` (any future expiry, any CVC).
+4. The poll completes, the license key lands in `~/.config/shareware/licenses/hello-shareware.key`, and the Payments page of the dashboard shows the charge with a 5% application fee.
 
 ## 5. Go live
 
-Repeat step 2 in **Live mode** on the deployed domain (real `sk_live_` key,
-real webhook endpoint), swap the values in the server's environment, and run
-one real purchase end to end before announcing anything. Live Express
-onboarding requires devs' real identity/bank details — that part is Stripe's
-problem, not yours.
+Repeat step 2 in **Live mode** on the deployed domain (real `sk_live_` key, real webhook endpoint), swap the values in the server's environment, and run one real purchase end to end before announcing anything. Live Express onboarding requires devs' real identity/bank details — that part is Stripe's problem, not yours.

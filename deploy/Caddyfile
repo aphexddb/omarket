@@ -1,4 +1,4 @@
-omarchyshareware.com {
+omarket.dev {
 	reverse_proxy localhost:8484
 
 	encode gzip
@@ -9,6 +9,6 @@ omarchyshareware.com {
 	}
 }
 
-www.omarchyshareware.com {
-	redir https://omarchyshareware.com{uri} permanent
+www.omarket.dev {
+	redir https://omarket.dev{uri} permanent
 }
