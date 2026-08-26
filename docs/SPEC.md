@@ -1,24 +1,11 @@
 # omarchy-shareware — Platform Spec (v1)
 
-Shareware for the terminal age. Devs ship real Arch packages, users try everything, paying unlocks a signed offline license key. Platform takes **5% of every sale** (and eats Stripe's processing fees out of that side — devs see one number). Stripe Connect (Express, destination charges) moves the money.
+Shareware for the terminal age. Devs ship real packages, users try everything, paying unlocks a signed offline license key.
 
-Code lives in two repos: this one (`github.com/aphexddb/omarket`: `license/`, `client/`, `cmd/omarket`, `cmd/sharewarectl`) and `github.com/aphexddb/omarket.dev` (`server/`, `cmd/sharewared`, `catalog/`, `web/`, `deploy/`, `packaging/`, `examples/`). Layout below spans both:
-
-```
-license/            # license key format: sign, verify, keygen (pure stdlib crypto/ed25519)
-cmd/sharewarectl/   # CLI: keygen, sign, verify (platform + dev tooling)
-server/             # HTTP server logic (catalog, buy, webhook, purchase polling, dev onboarding)
-cmd/sharewared/     # server entrypoint
-client/             # omarket client logic (catalog fetch, buy flow, license store)
-cmd/omarket/        # user-facing TUI/CLI
-catalog/            # app listings, one JSON file per app (curation via PR)
-packaging/          # PKGBUILD template + GitHub Action for devs
-examples/           # example paid app wired up end to end
-web/                # static landing page served by sharewared at /
-docs/               # this spec, DEVELOPERS.md
-```
-
----
+How it works:
+- Dev lists an app (ex: using Stripe Connect), buyer pays `price_cents`
+- Platform takes 5%. Stripe's processing fees, risk radar, etc. come out of the platform (the merchant of record). Stripe pays the developer directly
+- Dev nets 95%. No subscriptions required, no DRM.
 
 ## 1. License key format (`SHRW1`)
 
@@ -47,7 +34,7 @@ Payload JSON fields:
 
 `kind` is `"personal"` or `"team"`.
 
-### `license` package public API (exact — other packages compile against this)
+### `license` package public API (packages compile against this)
 
 ```go
 package license
@@ -94,8 +81,6 @@ sharewarectl sign   -key <priv b64> -app <id> [-email x] [-kind personal]   # pr
 sharewarectl verify -pub <pub b64> -license <key or @file>                  # prints payload JSON, exit 1 on bad
 ```
 
----
-
 ## 2. Catalog
 
 `catalog/*.json`, one app per file, filename `<id>.json`. Curation = pull request.
@@ -124,60 +109,18 @@ sharewarectl verify -pub <pub b64> -license <key or @file>                  # pr
 
 Server loads the catalog directory at boot (`CATALOG_DIR`, default `./catalog`).
 
-## 3. Server (`sharewared`) HTTP API
+## 3. Client (`omarket`)
 
-Env config:
-
-```
-PORT                  default 8484
-BASE_URL              e.g. https://market.example.com (used in Stripe redirect URLs)
-STRIPE_SECRET_KEY     sk_...
-STRIPE_WEBHOOK_SECRET whsec_...
-PLATFORM_SIGNING_KEY  base64 ed25519 private key (license.DecodePrivateKey)
-CATALOG_DIR           default ./catalog
-STATE_PATH            default ./sharewared.db   (bbolt)
-WEB_DIR               default ./web             (served at /)
-```
-
-Endpoints (JSON errors as `{"error":"..."}` with proper status codes):
-
-- `GET /catalog.json` → `{"apps":[App, ...]}` (the catalog files, as parsed).
-- `POST /api/buy` body `{"app":"<id>","email":"<optional>"}` → `{"checkout_url":"https://checkout.stripe.com/...","purchase":"pt_<32 hex>"}`. Creates a Stripe Checkout Session (mode=payment, destination charge):
-  - `payment_intent_data.application_fee_amount = price_cents * 5 / 100` (integer floor)
-  - `payment_intent_data.transfer_data.destination = app.stripe_account`
-  - `success_url = BASE_URL/success?purchase=pt_...`, `cancel_url = BASE_URL/cancel`
-  - session metadata: `app`, `purchase`, `email`
-  - Store purchase record keyed by token: `{app, email, status:"pending", created_at}`.
-- `GET /api/purchase/{token}` → `{"status":"pending"}` or `{"status":"complete","license_key":"SHRW1..."}`. 404 unknown token.
-- `POST /stripe/webhook` → verify signature with STRIPE_WEBHOOK_SECRET; on `checkout.session.completed`, look up purchase by metadata, `license.Sign` a key for the app/email, store it, mark complete. Idempotent.
-- `POST /api/dev/onboard` body `{"email":"..."}` → `{"account":"acct_...","onboarding_url":"https://connect.stripe.com/..."}`. Creates an Express account + account link (refresh/return to BASE_URL/dev).
-- `GET /` and `GET /success`, `/cancel`, `/dev` → static from WEB_DIR (success page tells the buyer to go back to their terminal).
-- `GET /healthz` → `{"ok":true}`.
-
-Storage: bbolt, bucket `purchases`, key = token, value = JSON record. No accounts, no sessions.
-
-## 4. Client (`omarket`)
-
-Config dir: `os.UserConfigDir()/shareware/` → `config.json` (`{"server":"https://..."}`, default server `https://omarket.dev` (the canonical instance), overridable with `--server` / `OMARKET_SERVER`), licenses in `licenses/<app>.key`.
-
-Subcommands (stdlib `flag`, no cobra):
+Default server `https://omarket.dev` (the canonical instance). This is overridable with `--server` or setting `OMARKET_SERVER`. All licenses are stored in `licenses/<app>.key`.
 
 ```
-omarket                      # bubbletea TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
+omarket                      # main TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
 omarket list                 # plain table of catalog
 omarket info <app>
-omarket install <app>        # pacman/yay shell-out per §2
+omarket install <app>        # pacman/yay shell-out
 omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrterminal),
                              # poll /api/purchase/{token} every 2s (10 min timeout),
                              # save key to licenses/<app>.key, print it big and celebratory
 omarket licenses             # list stored keys, verified status
 omarket dev onboard -email x # POST /api/dev/onboard, print/open the URL
 ```
-
-TUI style: keyboard-driven, Tokyo Night-ish palette (lipgloss), no mouse required — it should feel native next to omarchy-menu.
-
-## 5. Money (the whole point)
-
-- Dev lists app with their Stripe Connect account. Buyer pays `price_cents`.
-- Platform takes 5% via `application_fee_amount`; Stripe's processing fees come out of the platform's cut (destination charges = platform is merchant of record).
-- Dev nets 95%. One number, no tiers, no subscriptions required, no DRM phone-home.
