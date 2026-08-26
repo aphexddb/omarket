@@ -11,7 +11,7 @@ Learn more at [omarchyshareware.com](https://github.com/aphexddb/omarchysharewar
 Download the latest release for Linux x86_64:
 
 ```bash
-curl -sL https://github.com/aphexddb/omarket/releases/latest/download/omarket_Linux_x86_64.tar.gz | tar xz omarket
+curl -sL https://github.com/aphexddb/omarket/releases/latest/download/omarket_linux_x86_64.tar.gz | tar xz omarket
 sudo install -m755 omarket /usr/local/bin/omarket
 ```
 
@@ -22,8 +22,6 @@ Or build from source with Go:
 ```bash
 go install github.com/aphexddb/omarket/cmd/omarket@latest
 ```
-
-AUR package: coming.
 
 ## Buying shareware is easy
 
