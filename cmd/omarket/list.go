@@ -7,7 +7,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 func priceString(a client.App) string {

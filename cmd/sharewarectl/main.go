@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aphexddb/omarchy-shareware/internal/version"
-	"github.com/aphexddb/omarchy-shareware/license"
+	"github.com/aphexddb/omarket/internal/version"
+	"github.com/aphexddb/omarket/license"
 )
 
 func main() {

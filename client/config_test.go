@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 // setConfigDir points os.UserConfigDir() at dir for the duration of the test.

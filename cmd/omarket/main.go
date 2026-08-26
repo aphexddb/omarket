@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aphexddb/omarchy-shareware/internal/version"
+	"github.com/aphexddb/omarket/internal/version"
 )
 
 func main() {

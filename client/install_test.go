@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 type fakeRunner struct {

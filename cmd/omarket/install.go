@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 func runInstall(args []string) error {

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 func runDev(args []string) error {

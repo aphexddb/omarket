@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aphexddb/omarchy-shareware/client"
-	"github.com/aphexddb/omarchy-shareware/license"
+	"github.com/aphexddb/omarket/client"
+	"github.com/aphexddb/omarket/license"
 )
 
 func runLicenses(args []string) error {

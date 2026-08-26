@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: omarchy-shareware
+project_name: omarket
 
 before:
   hooks:
@@ -17,9 +17,9 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
+      - -X github.com/aphexddb/omarket/internal/version.Version={{.Version}}
+      - -X github.com/aphexddb/omarket/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/aphexddb/omarket/internal/version.Date={{.Date}}
 
   - id: sharewarectl
     main: ./cmd/sharewarectl
@@ -30,22 +30,9 @@ builds:
     flags: [-trimpath]
     ldflags:
       - -s -w
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
-
-  - id: sharewared
-    main: ./cmd/sharewared
-    binary: sharewared
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Version={{.Version}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Commit={{.ShortCommit}}
-      - -X github.com/aphexddb/omarchy-shareware/internal/version.Date={{.Date}}
+      - -X github.com/aphexddb/omarket/internal/version.Version={{.Version}}
+      - -X github.com/aphexddb/omarket/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/aphexddb/omarket/internal/version.Date={{.Date}}
 
 archives:
   - formats: [tar.gz]

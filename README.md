@@ -1,54 +1,55 @@
-# omarchy-shareware
+# omarket
 
-Shareware for the terminal age.
+The CLI and shared Go packages for [omarket.dev](https://omarket.dev) —
+shareware for the terminal age, built for Omarchy.
 
-Devs ship real Arch packages. Users try everything, free, forever if they want. Paying unlocks an offline, Ed25519-signed license key — no phone-home, no DRM, no accounts. The platform takes a flat 5% via Stripe Connect and eats Stripe's processing fees out of that cut. Devs net 95%. One number.
+Try apps free, forever. Paying unlocks an offline, Ed25519-signed license key —
+no phone-home, no DRM, no accounts. Devs keep 95% of every sale.
 
-The canonical instance lives at [omarket.dev](https://omarket.dev) — `omarket` points there by default. The code is MIT; run your own instance if you'd rather. This is a community project with no affiliation with Omarchy, Basecamp, or 37signals — it's just built for people who live in that terminal.
+This is a community project with no affiliation with Omarchy, Basecamp, or
+37signals.
 
-## Why not an app store
+## The ecosystem
 
-- **5% flat.** No tiers, no "featured placement" upsell, no 30% toll.
-- **No gatekeeping.** No review queue. Curation happens via pull request against `catalog/`, same as any other patch.
-- **Offline keys.** A license is a signed string you can verify with nothing but a public key and stdlib crypto. It works with the network off.
-- **Source-included by default.** Listings that ship source get featured. This isn't a walled garden; it's shareware.
+| Repo | What it is |
+|------|------------|
+| **this repo** | `omarket` CLI/TUI, `sharewarectl`, and the shared `license` + `client` packages |
+| [omarket.dev](https://github.com/aphexddb/omarket.dev) | the API/server (`sharewared`), app catalog (list your app via PR), deploy config |
+| [omarchyshareware.com](https://github.com/aphexddb/omarchyshareware.com) | the website: web catalog, checkout, license verifier |
 
-## Quickstart: users
+## Install
 
 ```bash
-omarket                # bubbletea TUI — browse, enter for detail, b to buy, i to install
-omarket list            # plain-text catalog
-omarket buy hello-shareware   # opens Stripe checkout, polls for completion, saves your key
-omarket install hello-shareware   # pacman -S (falls back to yay, or just prints the command)
+go install github.com/aphexddb/omarket/cmd/omarket@latest
 ```
 
-Licenses land in `~/.config/shareware/licenses/<app>.key`. Nothing to log into.
+AUR package: coming.
 
-## Quickstart: devs
+## Use
 
-1. `omarket dev onboard -email you@example.com` — spins up a Stripe Express account, hands you an onboarding URL. Takes a few minutes.
-2. Package your app: an Arch `PKGBUILD` (start from `packaging/PKGBUILD.template`) plus, optionally, a license check (three ways to do it, honor system included — see `docs/DEVELOPERS.md`).
-3. Add `catalog/<id>.json` and open a PR. That's the review process.
+```bash
+omarket                # TUI — browse, enter for detail, b to buy, i to install
+omarket list           # plain-text catalog
+omarket buy <app>      # Stripe checkout via URL/QR, polls, saves your key
+omarket install <app>  # pacman -S (falls back to yay, or prints the command)
+omarket licenses       # list stored keys, verified status
+omarket dev onboard -email you@example.com   # start selling
+```
 
-See `docs/DEVELOPERS.md` for the full walkthrough, including the money math.
+Licenses land in `~/.config/shareware/licenses/<app>.key`. The client talks to
+`https://omarket.dev` by default; point it elsewhere with `OMARKET_SERVER` or
+`--server`.
 
-## Monorepo layout
+## Packages
 
-Single Go module: `github.com/aphexddb/omarchy-shareware`.
+- `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib
+  `crypto/ed25519`; verification works fully offline. Import this to check
+  licenses in your own app.
+- `client/` — catalog fetch, buy flow, license store; what the CLI is built on.
+- `cmd/sharewarectl` — keygen/sign/verify tooling for platform operators and
+  devs who script their license checks.
 
-| Path | What lives here |
-|------|------|
-| `license/` | License key format: sign, verify, keygen (pure stdlib `crypto/ed25519`) |
-| `cmd/sharewarectl/` | CLI: keygen, sign, verify (platform + dev tooling) |
-| `server/` | HTTP server logic: catalog, buy, webhook, purchase polling, dev onboarding |
-| `cmd/sharewared/` | Server entrypoint |
-| `client/` | `omarket` client logic: catalog fetch, buy flow, license store |
-| `cmd/omarket/` | User-facing TUI/CLI |
-| `catalog/` | App listings, one JSON file per app (curation via PR) |
-| `packaging/` | PKGBUILD template + GitHub Action for devs |
-| `examples/` | Example paid app, wired up end to end |
-| `web/` | Static landing page, served by `sharewared` at `/` |
-| `docs/` | `SPEC.md` (the contract) and `DEVELOPERS.md` (the walkthrough) |
+The wire format and API contract live in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Build
 
@@ -56,18 +57,8 @@ Single Go module: `github.com/aphexddb/omarchy-shareware`.
 go build ./...
 ```
 
-Version lives in [`VERSION`](VERSION). Tag `v$(cat VERSION)` and push to cut a
-GitHub release via GoReleaser (`.github/workflows/release.yml`). Pushes and PRs
-build a snapshot in CI. Test that workflow locally with `act`:
-
-```bash
-act pull_request -W .github/workflows/ci.yml -j build
-```
-
-## Docs
-
-- [`docs/DEVELOPERS.md`](docs/DEVELOPERS.md) — get paid in 10 minutes
-- [`docs/SPEC.md`](docs/SPEC.md) — the platform spec, authoritative
+Version lives in [`VERSION`](VERSION). Tag `v$(cat VERSION)` to cut a release
+via GoReleaser.
 
 ## License
 

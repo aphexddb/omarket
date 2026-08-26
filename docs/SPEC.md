@@ -2,7 +2,7 @@
 
 Shareware for the terminal age. Devs ship real Arch packages, users try everything, paying unlocks a signed offline license key. Platform takes **5% of every sale** (and eats Stripe's processing fees out of that side — devs see one number). Stripe Connect (Express, destination charges) moves the money.
 
-Monorepo layout (single Go module `github.com/aphexddb/omarchy-shareware`):
+Code lives in two repos: this one (`github.com/aphexddb/omarket`: `license/`, `client/`, `cmd/omarket`, `cmd/sharewarectl`) and `github.com/aphexddb/omarket.dev` (`server/`, `cmd/sharewared`, `catalog/`, `web/`, `deploy/`, `packaging/`, `examples/`). Layout below spans both:
 
 ```
 license/            # license key format: sign, verify, keygen (pure stdlib crypto/ed25519)
@@ -107,7 +107,7 @@ sharewarectl verify -pub <pub b64> -license <key or @file>                  # pr
   "description": "One-line-ish description.",
   "version": "1.0.0",
   "homepage": "https://example.com",
-  "source": "https://github.com/aphexddb/omarchy-shareware",
+  "source": "https://github.com/aphexddb/omarket",
   "pkgname": "hello-shareware",
   "price_cents": 900,
   "currency": "usd",

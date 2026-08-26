@@ -3,7 +3,7 @@ package client_test
 import (
 	"testing"
 
-	"github.com/aphexddb/omarchy-shareware/client"
+	"github.com/aphexddb/omarket/client"
 )
 
 func TestLicenseStoreRoundTrip(t *testing.T) {
