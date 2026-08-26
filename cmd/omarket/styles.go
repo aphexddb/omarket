@@ -2,7 +2,7 @@ package main
 
 import "github.com/charmbracelet/lipgloss"
 
-// Tokyo Night-ish palette (SPEC §4).
+// Tokyo Night-ish palette, matching the omarket.dev site.
 var (
 	colorBg     = lipgloss.Color("#1a1b26")
 	colorFg     = lipgloss.Color("#c0caf5")
