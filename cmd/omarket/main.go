@@ -35,6 +35,10 @@ func run(args []string) error {
 		return runLicenses(args[1:])
 	case "dev":
 		return runDev(args[1:])
+	case "sell":
+		return runSell(args[1:])
+	case "admin":
+		return runAdmin(args[1:])
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
 		return nil
@@ -56,6 +60,11 @@ func usage() {
   omarket buy <app> [-email x]
   omarket licenses
   omarket dev onboard -email x
+  omarket sell init            start selling: Stripe onboarding in browser
+  omarket sell claim <app-id>  claim an app id, generates omarket.json
+  omarket sell push            push omarket.json (name/description/price)
+  omarket sell testkey [app]   mint yourself a local test license
+  omarket sell status          seller account + app status
   omarket version
 
   all subcommands accept -server <url> to override the configured server`)
