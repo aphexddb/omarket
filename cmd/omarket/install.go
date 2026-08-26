@@ -8,6 +8,13 @@ import (
 	"github.com/aphexddb/omarket/client"
 )
 
+// runInstall shells out to install an app's underlying package (pacman,
+// falling back to yay, or printing the command if neither is found; see
+// client.Install). It's a buyer-facing action distinct from `buy` — `buy`
+// only handles payment and the license key, while this installs the
+// software itself, and the TUI's "i" key drives it independently of "b" buy.
+// It doesn't fit any of the five top-level commands, so it stays a hidden,
+// working alias (not in usage text) rather than being folded or dropped.
 func runInstall(args []string) error {
 	fs := flag.NewFlagSet("install", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")

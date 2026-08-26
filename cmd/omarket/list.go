@@ -17,14 +17,11 @@ func priceString(a client.App) string {
 	return fmt.Sprintf("$%.2f", float64(a.PriceCents)/100)
 }
 
-func runList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
-	server := fs.String("server", "", "market server URL")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	c := client.NewClient(client.ResolveServer(*server))
+// printCatalog fetches and prints the full catalog as a plain table. It
+// backs both `omarket buy` with no app argument and the hidden `omarket
+// list` alias.
+func printCatalog(server string) error {
+	c := client.NewClient(client.ResolveServer(server))
 	apps, err := c.GetCatalog(context.Background())
 	if err != nil {
 		return fmt.Errorf("fetching catalog: %w", err)
@@ -38,6 +35,18 @@ func runList(args []string) error {
 	return w.Flush()
 }
 
+// runList is a hidden backward-compat alias for `omarket buy` with no app
+// argument (dropped from usage text, but kept working for anyone who
+// scripted it).
+func runList(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	server := fs.String("server", "", "market server URL")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return printCatalog(*server)
+}
+
 func findApp(apps []client.App, id string) (client.App, bool) {
 	for _, a := range apps {
 		if a.ID == id {
@@ -47,6 +56,9 @@ func findApp(apps []client.App, id string) (client.App, bool) {
 	return client.App{}, false
 }
 
+// runInfo is not one of the five approved top-level commands either, but
+// nothing in the restructure calls for dropping its detail-view behavior, so
+// like `list` and `install` it stays a hidden, working alias.
 func runInfo(args []string) error {
 	fs := flag.NewFlagSet("info", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")

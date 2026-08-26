@@ -28,7 +28,7 @@ go install github.com/aphexddb/omarket/cmd/omarket@latest
 Install the binary (above), then:
 
 ```bash
-omarket list                # plain-text catalog
+omarket buy                 # plain-text catalog
 omarket buy hello-shareware # Stripe checkout via URL/QR, polls, saves your key
 ```
 
@@ -38,6 +38,7 @@ Your license lands in `~/.config/shareware/licenses/<app>.key`. Apps verify it f
 omarket                # TUI — browse, enter for detail, b to buy, i to install
 omarket install <app>  # pacman -S (falls back to yay, or prints the command)
 omarket licenses       # list stored keys, verified status
+omarket verify <app>.key   # re-verify a key offline, anytime
 ```
 
 The client talks to `https://omarket.dev` by default; point it elsewhere with `OMARKET_SERVER` or `--server`.

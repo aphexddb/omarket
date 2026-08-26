@@ -20,6 +20,9 @@ const (
 
 var spinnerFrames = []rune{'|', '/', '-', '\\'}
 
+// runBuy implements `omarket buy [app] [-email x]`: with no app argument it
+// browses the catalog (absorbing the old `list` command); with one, it runs
+// the purchase flow.
 func runBuy(args []string) error {
 	fs := flag.NewFlagSet("buy", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
@@ -28,7 +31,7 @@ func runBuy(args []string) error {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: omarket buy <app> [-email x]")
+		return printCatalog(*server)
 	}
 	appID := fs.Arg(0)
 

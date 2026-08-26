@@ -109,11 +109,11 @@ Server loads the catalog directory at boot (`CATALOG_DIR`, default `./catalog`).
 
 Default server `https://omarket.dev` (the canonical instance). This is overridable with `--server` or setting `OMARKET_SERVER`. All licenses are stored in `licenses/<app>.key`.
 
+Five top-level commands: `buy`, `sell`, `licenses`, `verify`, `version`.
+
 ```
 omarket                      # main TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
-omarket list                 # plain table of catalog
-omarket info <app>
-omarket install <app>        # pacman/yay shell-out
+omarket buy                  # plain table of the catalog (no app id given)
 omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrterminal),
                              # poll /api/purchase/{token} every 2s (10 min timeout),
                              # save key to licenses/<app>.key, print it big and celebratory
@@ -126,7 +126,14 @@ omarket verify <key|path|-> [-server <url>]
                              # platform key); -server fetches and verifies
                              # against that server's GET /api/pubkey key(s)
                              # instead.
+omarket version               # print the version
 ```
+
+`omarket list` (bare catalog table), `omarket info <app>` (single-app detail),
+and `omarket install <app>` (pacman/yay shell-out; also reachable as "i" in
+the TUI) still work exactly as before — they're just no longer advertised in
+`omarket -h`, having been superseded by (`list`) or folded alongside (`info`,
+`install`) the five top-level commands above.
 
 `GET /api/pubkey` -> `200 {"public_key","key_id","fingerprint","keys":[{"key_id","algorithm","public_key","fingerprint"}]}`.
 `public_key` is standard base64; `key_id` is `pk_` + the first 12 lowercase
