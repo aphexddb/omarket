@@ -51,6 +51,34 @@ archives:
 checksum:
   name_template: checksums.txt
 
+aurs:
+  - name: omarket-bin
+    homepage: https://omarket.dev
+    description: "omarket CLI: browse, buy, and install shareware from the omarket platform"
+    maintainers:
+      - "Gardiner Allen <aphexddb@gmail.com>"
+    license: MIT
+    provides:
+      - omarket
+    conflicts:
+      - omarket
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: ssh://aur@aur.archlinux.org/omarket-bin.git
+    # Skip publishing when no deploy key is configured (e.g. forks, local
+    # snapshot builds) so goreleaser still succeeds without AUR_KEY set. The
+    # release workflow must set the AUR_KEY secret for real releases to
+    # actually publish to AUR.
+    skip_upload: "{{ if .Env.AUR_KEY }}false{{ else }}true{{ end }}"
+    commit_author:
+      name: Gardiner Allen
+      email: aphexddb@gmail.com
+    commit_msg_template: "chore: update omarket-bin to {{ .Tag }}"
+    package: |-
+      install -Dm755 "./omarket" "${pkgdir}/usr/bin/omarket"
+      install -Dm755 "./sharewarectl" "${pkgdir}/usr/bin/sharewarectl"
+      install -Dm644 "./LICENSE.md" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+
 changelog:
   use: git
   sort: asc
