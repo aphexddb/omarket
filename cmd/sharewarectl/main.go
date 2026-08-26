@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aphexddb/omarchy-shareware/internal/version"
 	"github.com/aphexddb/omarchy-shareware/license"
 )
 
@@ -26,6 +27,12 @@ func main() {
 		err = runSign(os.Args[2:])
 	case "verify":
 		err = runVerify(os.Args[2:])
+	case "version", "-v", "--version":
+		fmt.Println(version.String())
+		return
+	case "-h", "--help", "help":
+		usage()
+		return
 	default:
 		usage()
 		os.Exit(1)
@@ -41,7 +48,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   sharewarectl keygen
   sharewarectl sign   -key <priv b64> -app <id> [-email x] [-kind personal]
-  sharewarectl verify -pub <pub b64> -license <key or @file>`)
+  sharewarectl verify -pub <pub b64> -license <key or @file>
+  sharewarectl version`)
 }
 
 func runKeygen(args []string) error {

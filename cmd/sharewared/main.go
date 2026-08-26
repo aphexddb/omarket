@@ -13,11 +13,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aphexddb/omarchy-shareware/internal/version"
 	"github.com/aphexddb/omarchy-shareware/license"
 	"github.com/aphexddb/omarchy-shareware/server"
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "version", "-v", "--version":
+			fmt.Println(version.String())
+			return
+		case "-h", "--help", "help":
+			fmt.Fprintln(os.Stderr, "usage: sharewared\n       sharewared version")
+			return
+		}
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "sharewared:", err)
 		os.Exit(1)
@@ -26,6 +37,7 @@ func main() {
 
 func run() error {
 	logger := log.New(os.Stdout, "sharewared: ", log.LstdFlags)
+	logger.Println(version.String())
 
 	port := envOr("PORT", "8484")
 	baseURL := os.Getenv("BASE_URL")
