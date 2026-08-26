@@ -150,8 +150,12 @@ func (s *Server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), s.webhookSecret)
+	// IgnoreAPIVersionMismatch: accounts pinned to older API versions render
+	// events with that version; we only read stable fields (id, metadata).
+	event, err := webhook.ConstructEventWithOptions(payload, r.Header.Get("Stripe-Signature"), s.webhookSecret,
+		webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true})
 	if err != nil {
+		s.logger.Printf("webhook: rejecting event: %v", err)
 		writeError(w, http.StatusBadRequest, "webhook signature verification failed")
 		return
 	}

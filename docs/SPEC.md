@@ -1,9 +1,6 @@
 # omarchy-shareware — Platform Spec (v1)
 
-Shareware for the terminal age. Devs ship real Arch packages, users try everything,
-paying unlocks a signed offline license key. Platform takes **5% of every sale**
-(and eats Stripe's processing fees out of that side — devs see one number).
-Stripe Connect (Express, destination charges) moves the money.
+Shareware for the terminal age. Devs ship real Arch packages, users try everything, paying unlocks a signed offline license key. Platform takes **5% of every sale** (and eats Stripe's processing fees out of that side — devs see one number). Stripe Connect (Express, destination charges) moves the money.
 
 Monorepo layout (single Go module `github.com/aphexddb/omarchy-shareware`):
 
@@ -123,8 +120,7 @@ sharewarectl verify -pub <pub b64> -license <key or @file>                  # pr
 - `price_cents: 0` = free (no buy flow).
 - `kind`: `"source-included"` (featured tier) or `"closed"`.
 - `stripe_account`: the dev's Stripe Connect account id; required when `price_cents > 0`.
-- `pkgname`: Arch package name; `omarket install` shells out to `sudo pacman -S <pkgname>`
-  (fall back to `yay -S` if pacman lacks it; on non-Arch, print the command instead).
+- `pkgname`: Arch package name; `omarket install` shells out to `sudo pacman -S <pkgname>` (fall back to `yay -S` if pacman lacks it; on non-Arch, print the command instead).
 
 Server loads the catalog directory at boot (`CATALOG_DIR`, default `./catalog`).
 
@@ -146,33 +142,23 @@ WEB_DIR               default ./web             (served at /)
 Endpoints (JSON errors as `{"error":"..."}` with proper status codes):
 
 - `GET /catalog.json` → `{"apps":[App, ...]}` (the catalog files, as parsed).
-- `POST /api/buy` body `{"app":"<id>","email":"<optional>"}` →
-  `{"checkout_url":"https://checkout.stripe.com/...","purchase":"pt_<32 hex>"}`.
-  Creates a Stripe Checkout Session (mode=payment, destination charge):
+- `POST /api/buy` body `{"app":"<id>","email":"<optional>"}` → `{"checkout_url":"https://checkout.stripe.com/...","purchase":"pt_<32 hex>"}`. Creates a Stripe Checkout Session (mode=payment, destination charge):
   - `payment_intent_data.application_fee_amount = price_cents * 5 / 100` (integer floor)
   - `payment_intent_data.transfer_data.destination = app.stripe_account`
   - `success_url = BASE_URL/success?purchase=pt_...`, `cancel_url = BASE_URL/cancel`
   - session metadata: `app`, `purchase`, `email`
   - Store purchase record keyed by token: `{app, email, status:"pending", created_at}`.
-- `GET /api/purchase/{token}` → `{"status":"pending"}` or
-  `{"status":"complete","license_key":"SHRW1..."}`. 404 unknown token.
-- `POST /stripe/webhook` → verify signature with STRIPE_WEBHOOK_SECRET; on
-  `checkout.session.completed`, look up purchase by metadata, `license.Sign` a key
-  for the app/email, store it, mark complete. Idempotent.
-- `POST /api/dev/onboard` body `{"email":"..."}` →
-  `{"account":"acct_...","onboarding_url":"https://connect.stripe.com/..."}`.
-  Creates an Express account + account link (refresh/return to BASE_URL/dev).
-- `GET /` and `GET /success`, `/cancel`, `/dev` → static from WEB_DIR
-  (success page tells the buyer to go back to their terminal).
+- `GET /api/purchase/{token}` → `{"status":"pending"}` or `{"status":"complete","license_key":"SHRW1..."}`. 404 unknown token.
+- `POST /stripe/webhook` → verify signature with STRIPE_WEBHOOK_SECRET; on `checkout.session.completed`, look up purchase by metadata, `license.Sign` a key for the app/email, store it, mark complete. Idempotent.
+- `POST /api/dev/onboard` body `{"email":"..."}` → `{"account":"acct_...","onboarding_url":"https://connect.stripe.com/..."}`. Creates an Express account + account link (refresh/return to BASE_URL/dev).
+- `GET /` and `GET /success`, `/cancel`, `/dev` → static from WEB_DIR (success page tells the buyer to go back to their terminal).
 - `GET /healthz` → `{"ok":true}`.
 
 Storage: bbolt, bucket `purchases`, key = token, value = JSON record. No accounts, no sessions.
 
 ## 4. Client (`omarket`)
 
-Config dir: `os.UserConfigDir()/shareware/` → `config.json` (`{"server":"https://..."}`,
-default server `http://localhost:8484`, overridable with `--server` / `OMARKET_SERVER`),
-licenses in `licenses/<app>.key`.
+Config dir: `os.UserConfigDir()/shareware/` → `config.json` (`{"server":"https://..."}`, default server `https://omarket.dev` (the canonical instance), overridable with `--server` / `OMARKET_SERVER`), licenses in `licenses/<app>.key`.
 
 Subcommands (stdlib `flag`, no cobra):
 
@@ -188,12 +174,10 @@ omarket licenses             # list stored keys, verified status
 omarket dev onboard -email x # POST /api/dev/onboard, print/open the URL
 ```
 
-TUI style: keyboard-driven, Tokyo Night-ish palette (lipgloss), no mouse required —
-it should feel native next to omarchy-menu.
+TUI style: keyboard-driven, Tokyo Night-ish palette (lipgloss), no mouse required — it should feel native next to omarchy-menu.
 
 ## 5. Money (the whole point)
 
 - Dev lists app with their Stripe Connect account. Buyer pays `price_cents`.
-- Platform takes 5% via `application_fee_amount`; Stripe's processing fees come out
-  of the platform's cut (destination charges = platform is merchant of record).
+- Platform takes 5% via `application_fee_amount`; Stripe's processing fees come out of the platform's cut (destination charges = platform is merchant of record).
 - Dev nets 95%. One number, no tiers, no subscriptions required, no DRM phone-home.

@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultServer is used when no server is configured by flag, env, or file.
-const DefaultServer = "http://localhost:8484"
+const DefaultServer = "https://omarket.dev"
 
 // omarketServerEnv overrides the configured server; see ResolveServer.
 const omarketServerEnv = "OMARKET_SERVER"
