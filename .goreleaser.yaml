@@ -5,7 +5,7 @@ project_name: omarket
 
 before:
   hooks:
-    - go test ./...
+    - make test
 
 builds:
   - id: omarket
