@@ -55,6 +55,23 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// HTTPError is returned by API calls when the server responds with a
+// non-2xx status. Callers that need to branch on the status code (e.g. a
+// 503 meaning "not configured") can recover it with errors.As.
+type HTTPError struct {
+	Method     string
+	Path       string
+	StatusCode int
+	Message    string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("%s %s: %s (status %d)", e.Method, e.Path, e.Message, e.StatusCode)
+	}
+	return fmt.Sprintf("%s %s: unexpected status %d", e.Method, e.Path, e.StatusCode)
+}
+
 // Client talks to a sharewared server (SPEC §3).
 type Client struct {
 	BaseURL string
@@ -141,10 +158,7 @@ func (c *Client) doJSONAuth(ctx context.Context, method, path, bearerToken strin
 	if resp.StatusCode >= 400 {
 		var e errorResponse
 		_ = json.NewDecoder(resp.Body).Decode(&e)
-		if e.Error != "" {
-			return fmt.Errorf("%s %s: %s (status %d)", method, path, e.Error, resp.StatusCode)
-		}
-		return fmt.Errorf("%s %s: unexpected status %d", method, path, resp.StatusCode)
+		return &HTTPError{Method: method, Path: path, StatusCode: resp.StatusCode, Message: e.Error}
 	}
 
 	if out == nil {

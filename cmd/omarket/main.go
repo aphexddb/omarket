@@ -55,10 +55,11 @@ func usage() {
   omarket install <app>
   omarket buy <app> [-email x]
   omarket licenses
-  omarket sell init            start selling: Stripe onboarding in browser
+  omarket sell init            start selling: instant, no Stripe needed
   omarket sell claim <app-id>  claim an app id, generates omarket.json
   omarket sell push            push omarket.json (name/description/price)
   omarket sell testkey [app]   mint yourself a local test license
+  omarket sell payouts         set up getting paid: Stripe onboarding in browser
   omarket sell status          seller account + app status
   omarket version
 

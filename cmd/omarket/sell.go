@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,13 +18,13 @@ import (
 )
 
 const (
-	sellPollInterval = 3 * time.Second
+	sellPollInterval = 5 * time.Second
 	sellPollTimeout  = 5 * time.Minute
 )
 
 func runSell(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|status>")
+		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|payouts|status>")
 	}
 	switch args[0] {
 	case "init":
@@ -33,16 +35,19 @@ func runSell(args []string) error {
 		return runSellPush(args[1:])
 	case "testkey":
 		return runSellTestkey(args[1:])
+	case "payouts":
+		return runSellPayouts(args[1:])
 	case "status":
 		return runSellStatus(args[1:])
 	default:
-		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|status>")
+		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|payouts|status>")
 	}
 }
 
-// runSellInit starts (or resumes reporting on) seller onboarding. If a
-// seller token already exists, it does not create a second seller account;
-// it just reports current status.
+// runSellInit creates a seller account and saves its token (or reports the
+// existing one if a token is already saved). It never touches Stripe — no
+// browser launch, no polling. Getting paid is a separate, later step: see
+// runSellPayouts.
 func runSellInit(args []string) error {
 	fs := flag.NewFlagSet("sell init", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
@@ -63,13 +68,11 @@ func runSellInit(args []string) error {
 			return fmt.Errorf("fetching seller status: %w", err)
 		}
 		printSellerStatus(me)
+		printSellNextSteps()
 		return nil
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	acct, err := c.CreateSeller(ctx)
+	acct, err := c.CreateSeller(context.Background())
 	if err != nil {
 		return fmt.Errorf("creating seller account: %w", err)
 	}
@@ -77,12 +80,66 @@ func runSellInit(args []string) error {
 		return fmt.Errorf("saving seller token: %w", err)
 	}
 
+	fmt.Println(successStyle.Render("★ Seller account created: " + acct.SellerID + " ★"))
+	printSellNextSteps()
+	return nil
+}
+
+// printSellNextSteps prints the two things a freshly-initialized (or
+// already-initialized) seller does next.
+func printSellNextSteps() {
+	fmt.Println()
+	fmt.Println(mutedStyle.Render("Next steps:"))
+	fmt.Println("  omarket sell claim <app-id>")
+	fmt.Println(mutedStyle.Render("  omarket sell payouts   # when you're ready to get paid"))
+}
+
+// runSellPayouts starts (or resumes) Stripe Connect onboarding for the
+// authenticated seller via POST /api/sellers/payouts. If the server hands
+// back a fresh onboarding URL, it opens it in the browser and polls
+// GET /api/sellers/me until charges are enabled (or the poll times out,
+// which is not an error). If onboarding_url comes back empty, charges are
+// already enabled. If the server has no Stripe configured, it returns a 503
+// which is reported and treated as a non-fatal, informational exit.
+func runSellPayouts(args []string) error {
+	fs := flag.NewFlagSet("sell payouts", flag.ExitOnError)
+	server := fs.String("server", "", "market server URL")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	token, err := requireSellerToken()
+	if err != nil {
+		return err
+	}
+
+	c := client.NewClient(client.ResolveServer(*server))
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	acct, err := c.StartPayouts(ctx, token)
+	if err != nil {
+		var herr *client.HTTPError
+		if errors.As(err, &herr) && herr.StatusCode == http.StatusServiceUnavailable {
+			fmt.Println(errorStyle.Render("Payouts unavailable: " + herr.Message))
+			fmt.Println(mutedStyle.Render("This server doesn't have payouts configured."))
+			return nil
+		}
+		return fmt.Errorf("starting payouts: %w", err)
+	}
+
+	if acct.OnboardingURL == "" {
+		fmt.Println(successStyle.Render("★ Payouts already set up — charges are enabled. ★"))
+		return nil
+	}
+
 	fmt.Println()
 	fmt.Println(checkoutStyle.Render("Onboarding: " + acct.OnboardingURL))
 	fmt.Println(mutedStyle.Render("Opening in your browser... (Ctrl-C to stop waiting; finish later and re-check with `omarket sell status`)"))
 	openBrowser(acct.OnboardingURL)
 
-	return pollSellerOnboarding(ctx, c, acct.SellerToken, acct.OnboardingURL)
+	return pollSellerOnboarding(ctx, c, token, acct.OnboardingURL)
 }
 
 // pollSellerOnboarding polls GET /api/sellers/me every sellPollInterval, up
@@ -161,16 +218,31 @@ func printSellerStatus(me client.SellerMe) {
 	}
 	if len(me.Apps) == 0 {
 		fmt.Println("apps:            (none claimed yet)")
-		return
-	}
-	fmt.Println("apps:")
-	for _, a := range me.Apps {
-		listed := "unlisted"
-		if a.Listed {
-			listed = "listed"
+	} else {
+		fmt.Println("apps:")
+		for _, a := range me.Apps {
+			listed := "unlisted"
+			if a.Listed {
+				listed = "listed"
+			}
+			fmt.Printf("  %-24s %-8s $%.2f\n", a.ID, listed, float64(a.PriceUSDCents)/100)
 		}
-		fmt.Printf("  %-24s %-8s $%.2f\n", a.ID, listed, float64(a.PriceUSDCents)/100)
 	}
+
+	if !me.ChargesEnabled && me.OnboardingURL == "" && sellerHasPricedApp(me) {
+		fmt.Println(mutedStyle.Render("One or more apps are priced but payouts aren't set up — run `omarket sell payouts` to get paid."))
+	}
+}
+
+// sellerHasPricedApp reports whether any of the seller's apps have a
+// nonzero price.
+func sellerHasPricedApp(me client.SellerMe) bool {
+	for _, a := range me.Apps {
+		if a.PriceUSDCents > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func runSellClaim(args []string) error {
@@ -242,6 +314,15 @@ func runSellPush(args []string) error {
 	fmt.Printf("  price:    $%.2f\n", float64(app.PriceUSDCents)/100)
 	fmt.Printf("  homepage: %s\n", app.Homepage)
 	fmt.Println(mutedStyle.Render("Claimed and buyable by exact name; appearing in the browse catalog is curated by the platform."))
+
+	// Best-effort payouts hint: never auto-launch the browser here — pushing
+	// a manifest shouldn't pop a Stripe tab as a surprise side effect. If the
+	// status check fails, just skip the hint rather than failing the push.
+	if app.PriceUSDCents > 0 {
+		if me, err := c.GetSellerMe(context.Background(), token); err == nil && !me.ChargesEnabled {
+			fmt.Println(mutedStyle.Render("This app is priced but payouts aren't set up yet — run `omarket sell payouts` to get paid."))
+		}
+	}
 	return nil
 }
 

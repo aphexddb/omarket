@@ -34,6 +34,12 @@ type SellerMe struct {
 	Apps           []AppPublic `json:"apps"`
 }
 
+// PayoutsAccount is the response to POST /api/sellers/payouts.
+type PayoutsAccount struct {
+	StripeAccount string `json:"stripe_account"`
+	OnboardingURL string `json:"onboarding_url"`
+}
+
 type testLicenseResponse struct {
 	LicenseKey string `json:"license_key"`
 }
@@ -54,6 +60,21 @@ func (c *Client) GetSellerMe(ctx context.Context, sellerToken string) (SellerMe,
 	var out SellerMe
 	if err := c.doJSONAuth(ctx, http.MethodGet, "/api/sellers/me", sellerToken, nil, &out); err != nil {
 		return SellerMe{}, err
+	}
+	return out, nil
+}
+
+// StartPayouts starts (or resumes) Stripe Connect onboarding for the
+// authenticated seller: POST /api/sellers/payouts with an empty JSON body.
+// If the seller already has a Stripe account, the server returns the same
+// 200 shape with a fresh onboarding link, or an empty OnboardingURL once
+// charges are enabled — callers should treat an empty OnboardingURL as
+// "already set up". A 503 means the server has no Stripe configured; use
+// errors.As with *HTTPError to detect it.
+func (c *Client) StartPayouts(ctx context.Context, sellerToken string) (PayoutsAccount, error) {
+	var out PayoutsAccount
+	if err := c.doJSONAuth(ctx, http.MethodPost, "/api/sellers/payouts", sellerToken, map[string]any{}, &out); err != nil {
+		return PayoutsAccount{}, err
 	}
 	return out, nil
 }

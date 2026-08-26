@@ -3,6 +3,7 @@ package client_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -65,6 +66,85 @@ func TestGetSellerMe(t *testing.T) {
 	}
 	if !me.ChargesEnabled || len(me.Apps) != 1 {
 		t.Fatalf("me = %+v", me)
+	}
+}
+
+func TestStartPayoutsFreshURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/sellers/payouts" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer sk_test_abc123" {
+			t.Errorf("Authorization header = %q", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(client.PayoutsAccount{
+			StripeAccount: "acct_123",
+			OnboardingURL: "https://connect.stripe.com/setup/123",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	acct, err := c.StartPayouts(context.Background(), "sk_test_abc123")
+	if err != nil {
+		t.Fatalf("StartPayouts: %v", err)
+	}
+	if acct.StripeAccount != "acct_123" {
+		t.Fatalf("acct.StripeAccount = %q", acct.StripeAccount)
+	}
+	if acct.OnboardingURL != "https://connect.stripe.com/setup/123" {
+		t.Fatalf("acct.OnboardingURL = %q", acct.OnboardingURL)
+	}
+}
+
+func TestStartPayoutsAlreadyEnabled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(client.PayoutsAccount{
+			StripeAccount: "acct_123",
+			OnboardingURL: "",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	acct, err := c.StartPayouts(context.Background(), "sk_test_abc123")
+	if err != nil {
+		t.Fatalf("StartPayouts: %v", err)
+	}
+	if acct.StripeAccount != "acct_123" {
+		t.Fatalf("acct.StripeAccount = %q", acct.StripeAccount)
+	}
+	if acct.OnboardingURL != "" {
+		t.Fatalf("acct.OnboardingURL = %q, want empty (already enabled)", acct.OnboardingURL)
+	}
+}
+
+func TestStartPayoutsNotConfigured(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "stripe not configured"})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	_, err := c.StartPayouts(context.Background(), "sk_test_abc123")
+	if err == nil {
+		t.Fatal("expected error for 503")
+	}
+	var herr *client.HTTPError
+	if !errors.As(err, &herr) {
+		t.Fatalf("err = %v, want *client.HTTPError", err)
+	}
+	if herr.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("herr.StatusCode = %d, want 503", herr.StatusCode)
+	}
+	if herr.Message != "stripe not configured" {
+		t.Fatalf("herr.Message = %q", herr.Message)
 	}
 }
 

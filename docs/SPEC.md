@@ -136,8 +136,20 @@ GET  /api/catalog                          -> 200 {"platform_fee_percent": int, 
 GET  /api/apps/{id}                        -> 200 AppPublic (listed or not), 404 unknown
 POST /api/sellers                          (no auth, empty JSON body)
                                             -> 201 {"seller_id","seller_token","onboarding_url"}
+                                            (onboarding_url is always "" — this
+                                            endpoint never touches Stripe)
 GET  /api/sellers/me                       (Authorization: Bearer <seller_token>)
                                             -> 200 {"seller_id","charges_enabled","onboarding_url","apps":[AppPublic...]}
+                                            (onboarding_url is "" until the
+                                            seller has started payouts setup)
+POST /api/sellers/payouts                  (Bearer, empty JSON body)
+                                            -> 200 {"stripe_account","onboarding_url"};
+                                            if a Stripe account already exists,
+                                            same 200 shape with a fresh
+                                            onboarding link, or onboarding_url:""
+                                            once charges are enabled; 503
+                                            {"error"} if the server has no
+                                            Stripe configured
 POST /api/apps                             (Bearer) {"id": "my-app-name"}
                                             -> 201 AppPublic; 409 if taken/reserved; 400 invalid
 PUT  /api/apps/{id}                        (Bearer, owner) {"name","description","homepage","price_usd_cents"}
@@ -157,16 +169,24 @@ platform operator with private tooling, not exposed in this CLI.
 
 ```
 omarket sell init            # POST /api/sellers (or GET /api/sellers/me if
-                             # already initialized); saves seller_token;
-                             # opens onboarding_url; polls /api/sellers/me
-                             # until charges_enabled (~5 min timeout, not
-                             # an error — reprints the URL to finish later)
+                             # already initialized); saves seller_token.
+                             # Instant — no Stripe involved.
 omarket sell claim <app-id>  # POST /api/apps; generates a template
                              # omarket.json manifest in the cwd
 omarket sell push            # reads ./omarket.json; PUT /api/apps/{id};
                              # refuses to push while template placeholder
-                             # values remain
+                             # values remain. If the pushed price is > 0 and
+                             # payouts aren't set up, prints a hint to run
+                             # `omarket sell payouts` (does not auto-open a
+                             # browser)
 omarket sell testkey [app]   # POST /api/apps/{id}/test-license; saves and
                              # locally verifies the key
+omarket sell payouts         # POST /api/sellers/payouts; opens the returned
+                             # onboarding_url in the browser and polls
+                             # /api/sellers/me until charges_enabled (~5 min
+                             # timeout, not an error — reprints how to
+                             # re-check later). If already enabled, says so
+                             # and exits. 503 means the server has no Stripe
+                             # configured.
 omarket sell status          # GET /api/sellers/me
 ```

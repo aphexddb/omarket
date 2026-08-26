@@ -47,10 +47,11 @@ The client talks to `https://omarket.dev` by default; point it elsewhere with `O
 ## Selling shareware is easy
 
 ```bash
-omarket sell init          # once: Stripe onboarding in browser
+omarket sell init          # once: instant, no Stripe needed
 omarket sell claim my-app-name # generates template omarket.json manifest
 omarket sell push          # reads omarket.json manifest: name, price, description. wont push a template version!
 omarket sell testkey       # your app now shows "registered" locally
+omarket sell payouts       # when ready to get paid: Stripe onboarding in browser
 ```
 
 Claimed apps can be bought immediately by exact name; appearing in the browse catalog is curated by the platform. The platform fee is public via `GET /api/catalog`.
