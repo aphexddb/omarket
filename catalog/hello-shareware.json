@@ -8,7 +8,7 @@
   "pkgname": "hello-shareware",
   "price_cents": 500,
   "currency": "usd",
-  "stripe_account": "acct_REPLACE_ME",
+  "stripe_account": "acct_1U8QgmELrhObriJV",
   "kind": "source-included",
   "tags": ["demo", "example"]
 }
