@@ -101,6 +101,78 @@ func TestBuyAndPollPurchaseToCompletion(t *testing.T) {
 	}
 }
 
+func TestGetPublicKeysCurrentShape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pubkey" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"public_key":  "primaryKeyBase64==",
+			"key_id":      "pk_primary000000",
+			"fingerprint": "SHA256:primary",
+			"keys": []map[string]any{
+				{"key_id": "pk_primary000000", "algorithm": "ed25519", "public_key": "primaryKeyBase64==", "fingerprint": "SHA256:primary"},
+				{"key_id": "pk_secondary00000", "algorithm": "ed25519", "public_key": "secondaryKeyBase64==", "fingerprint": "SHA256:secondary"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	keys, err := c.GetPublicKeys(context.Background())
+	if err != nil {
+		t.Fatalf("GetPublicKeys: %v", err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("len(keys) = %d, want 2", len(keys))
+	}
+	if keys[0].KeyID != "pk_primary000000" || keys[1].KeyID != "pk_secondary00000" {
+		t.Fatalf("unexpected keys: %+v", keys)
+	}
+}
+
+func TestGetPublicKeysLegacyShape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/pubkey" {
+			http.NotFound(w, r)
+			return
+		}
+		// Older server: only the top-level public_key, no "keys" array.
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"public_key": "legacyKeyBase64==",
+		})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	keys, err := c.GetPublicKeys(context.Background())
+	if err != nil {
+		t.Fatalf("GetPublicKeys: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("len(keys) = %d, want 1", len(keys))
+	}
+	if keys[0].PublicKey != "legacyKeyBase64==" {
+		t.Fatalf("keys[0].PublicKey = %q", keys[0].PublicKey)
+	}
+	if keys[0].KeyID != "" {
+		t.Fatalf("keys[0].KeyID = %q, want empty (legacy server didn't send one)", keys[0].KeyID)
+	}
+}
+
+func TestGetPublicKeysEmptyResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	if _, err := c.GetPublicKeys(context.Background()); err == nil {
+		t.Fatal("GetPublicKeys: expected error for response with no keys")
+	}
+}
+
 func TestPollPurchaseUnknownToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

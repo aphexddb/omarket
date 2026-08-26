@@ -21,19 +21,6 @@ builds:
       - -X github.com/aphexddb/omarket/internal/version.Commit={{.ShortCommit}}
       - -X github.com/aphexddb/omarket/internal/version.Date={{.Date}}
 
-  - id: sharewarectl
-    main: ./cmd/sharewarectl
-    binary: sharewarectl
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    flags: [-trimpath]
-    ldflags:
-      - -s -w
-      - -X github.com/aphexddb/omarket/internal/version.Version={{.Version}}
-      - -X github.com/aphexddb/omarket/internal/version.Commit={{.ShortCommit}}
-      - -X github.com/aphexddb/omarket/internal/version.Date={{.Date}}
-
 archives:
   - formats: [tar.gz]
     name_template: >-

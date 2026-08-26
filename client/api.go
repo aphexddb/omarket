@@ -55,6 +55,23 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// PubKeyEntry describes one signing key as returned by GET /api/pubkey.
+type PubKeyEntry struct {
+	KeyID       string `json:"key_id"`
+	Algorithm   string `json:"algorithm"`
+	PublicKey   string `json:"public_key"`
+	Fingerprint string `json:"fingerprint"`
+}
+
+// pubKeyResponse is the GET /api/pubkey response shape. Current servers
+// populate Keys; older servers only populate the top-level fields.
+type pubKeyResponse struct {
+	PublicKey   string        `json:"public_key"`
+	KeyID       string        `json:"key_id"`
+	Fingerprint string        `json:"fingerprint"`
+	Keys        []PubKeyEntry `json:"keys"`
+}
+
 // HTTPError is returned by API calls when the server responds with a
 // non-2xx status. Callers that need to branch on the status code (e.g. a
 // 503 meaning "not configured") can recover it with errors.As.
@@ -107,6 +124,29 @@ func (c *Client) Buy(ctx context.Context, app, email string) (checkoutURL, token
 		return "", "", err
 	}
 	return out.CheckoutURL, out.Purchase, nil
+}
+
+// GetPublicKeys fetches the server's Ed25519 license-signing key(s) from
+// GET /api/pubkey. Current servers return a "keys" array — every entry from
+// it is returned as-is. Older servers return only a single top-level
+// public_key (with optional key_id/fingerprint); that shape is normalized
+// into a one-entry slice so callers only ever deal with []PubKeyEntry.
+func (c *Client) GetPublicKeys(ctx context.Context) ([]PubKeyEntry, error) {
+	var out pubKeyResponse
+	if err := c.doJSON(ctx, http.MethodGet, "/api/pubkey", nil, &out); err != nil {
+		return nil, err
+	}
+	if len(out.Keys) > 0 {
+		return out.Keys, nil
+	}
+	if out.PublicKey == "" {
+		return nil, fmt.Errorf("%s/api/pubkey: response has no public_key", c.BaseURL)
+	}
+	return []PubKeyEntry{{
+		KeyID:       out.KeyID,
+		PublicKey:   out.PublicKey,
+		Fingerprint: out.Fingerprint,
+	}}, nil
 }
 
 // PollPurchase checks a purchase's status. status is "pending" or

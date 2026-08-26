@@ -73,13 +73,9 @@ func Sign(l License, priv ed25519.PrivateKey) (string, error)
 func Verify(key string, pub ed25519.PublicKey) (*License, error)
 ```
 
-### `sharewarectl` commands
-
-```
-sharewarectl keygen                          # prints PUBLIC=... PRIVATE=... (base64)
-sharewarectl sign   -key <priv b64> -app <id> [-email x] [-kind personal]   # prints key
-sharewarectl verify -pub <pub b64> -license <key or @file>                  # prints payload JSON, exit 1 on bad
-```
+Keypair generation and signing are platform-operator tooling (private,
+outside this repo). Buyers and sellers verify keys with `omarket verify`
+(§3) — no separate binary needed.
 
 ## 2. Catalog
 
@@ -122,7 +118,24 @@ omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrtermina
                              # poll /api/purchase/{token} every 2s (10 min timeout),
                              # save key to licenses/<app>.key, print it big and celebratory
 omarket licenses             # list stored keys, verified status
+omarket verify <key|path|-> [-server <url>]
+                             # verify a SHRW1 license key: arg is the key
+                             # itself, a path to a key file, or "-" for
+                             # stdin. Fully offline by default (checks
+                             # SHAREWARE_PUBLIC_KEY, else the baked-in
+                             # platform key); -server fetches and verifies
+                             # against that server's GET /api/pubkey key(s)
+                             # instead.
 ```
+
+`GET /api/pubkey` -> `200 {"public_key","key_id","fingerprint","keys":[{"key_id","algorithm","public_key","fingerprint"}]}`.
+`public_key` is standard base64; `key_id` is `pk_` + the first 12 lowercase
+hex chars of `sha256(raw public key bytes)`; `fingerprint` is
+`SHA256:<full lowercase hex digest>`. The top-level fields mirror `keys[0]`
+for older clients; `omarket verify -server` walks `keys[]` and verifies
+against each entry until one matches. A server that predates `keys[]`
+(top-level fields only) is still supported: `omarket verify` falls back to
+the top-level `public_key`.
 
 ## 4. Selling API
 

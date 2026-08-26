@@ -58,7 +58,6 @@ Claimed apps can be bought immediately by exact name; appearing in the browse ca
 
 - `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib  `crypto/ed25519`; verification works fully offline. Import this to check licenses in your own app.
 - `client/` — catalog fetch, buy flow, license store; what the CLI is built on.
-- `cmd/sharewarectl` — keygen/sign/verify tooling for platform operators and devs who script their license checks.
 
 The license format and API contract live in [`docs/SPEC.md`](docs/SPEC.md).
 
