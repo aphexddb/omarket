@@ -12,6 +12,12 @@ import (
 // DefaultServer is used when no server is configured by flag, env, or file.
 const DefaultServer = "https://omarket.dev"
 
+// DefaultPublicKey is the platform's Ed25519 license-signing public key
+// (standard base64), also served at https://omarket.dev/api/pubkey. It is
+// baked in so a fresh install can verify licenses with zero configuration.
+// SHAREWARE_PUBLIC_KEY overrides it for testing or local stacks.
+const DefaultPublicKey = "vIODssCr6I8zWUTaK/IhdHzkoK5LTdEzbtIeXRnatko="
+
 // omarketServerEnv overrides the configured server; see ResolveServer.
 const omarketServerEnv = "OMARKET_SERVER"
 

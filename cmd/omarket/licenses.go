@@ -25,19 +25,12 @@ func runLicenses(args []string) error {
 		return nil
 	}
 
-	var pub ed25519.PublicKey
-	if s := os.Getenv("SHAREWARE_PUBLIC_KEY"); s != "" {
-		pub, err = license.DecodePublicKey(s)
-		if err != nil {
-			return fmt.Errorf("decoding SHAREWARE_PUBLIC_KEY: %w", err)
-		}
+	pub, err := resolvePublicKey()
+	if err != nil {
+		return err
 	}
 
 	for _, e := range entries {
-		if pub == nil {
-			fmt.Printf("%-24s %s\n", e.App, e.Path)
-			continue
-		}
 		l, err := license.Verify(e.Key, pub)
 		if err != nil {
 			fmt.Printf("%-24s %-40s INVALID (%v)\n", e.App, e.Path, err)
@@ -46,4 +39,21 @@ func runLicenses(args []string) error {
 		fmt.Printf("%-24s %-40s VALID   %s\n", e.App, e.Path, l.ID)
 	}
 	return nil
+}
+
+// resolvePublicKey applies the license public key precedence:
+// SHAREWARE_PUBLIC_KEY env (if set, for testing/local stacks) >
+// client.DefaultPublicKey, the platform's baked-in key.
+func resolvePublicKey() (ed25519.PublicKey, error) {
+	s := os.Getenv("SHAREWARE_PUBLIC_KEY")
+	src := "SHAREWARE_PUBLIC_KEY"
+	if s == "" {
+		s = client.DefaultPublicKey
+		src = "default public key"
+	}
+	pub, err := license.DecodePublicKey(s)
+	if err != nil {
+		return nil, fmt.Errorf("decoding %s: %w", src, err)
+	}
+	return pub, nil
 }
