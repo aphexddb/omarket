@@ -25,18 +25,35 @@ go install github.com/aphexddb/omarket/cmd/omarket@latest
 
 AUR package: coming.
 
-## Use
+## Buying shareware is easy
+
+Install the binary (above), then:
+
+```bash
+omarket list                # plain-text catalog
+omarket buy hello-shareware # Stripe checkout via URL/QR, polls, saves your key
+```
+
+Your license lands in `~/.config/shareware/licenses/<app>.key`. Apps verify it fully offline — the platform's Ed25519 public key ships baked into the `omarket` binary, so there's zero configuration on your end.
 
 ```bash
 omarket                # TUI — browse, enter for detail, b to buy, i to install
-omarket list           # plain-text catalog
-omarket buy <app>      # Stripe checkout via URL/QR, polls, saves your key
 omarket install <app>  # pacman -S (falls back to yay, or prints the command)
 omarket licenses       # list stored keys, verified status
-omarket dev onboard -email you@example.com   # start selling
 ```
 
-Licenses land in `~/.config/shareware/licenses/<app>.key`. The client talks to `https://omarket.dev` by default; point it elsewhere with `OMARKET_SERVER` or `--server`.
+The client talks to `https://omarket.dev` by default; point it elsewhere with `OMARKET_SERVER` or `--server`.
+
+## Selling shareware is easy
+
+```bash
+omarket sell init          # once: Stripe onboarding in browser
+omarket sell claim my-app-name # generates template omarket.json manifest
+omarket sell push          # reads omarket.json manifest: name, price, description. wont push a template version!
+omarket sell testkey       # your app now shows "registered" locally
+```
+
+Claimed apps can be bought immediately by exact name; appearing in the browse catalog is curated by the platform. The platform fee is public via `GET /api/catalog`.
 
 ## Packages
 

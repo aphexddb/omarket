@@ -124,3 +124,51 @@ omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrtermina
 omarket licenses             # list stored keys, verified status
 omarket dev onboard -email x # POST /api/dev/onboard, print/open the URL
 ```
+
+## 4. Selling and curation API
+
+A second, seller-facing API — separate from the catalog.json/buy flow in
+§2/§3 above — backs `omarket sell` and `omarket admin`. `AppPublic` here is
+distinct from the catalog `App` shape in §2: it's what a seller edits and an
+admin curates, not what a buyer browses.
+
+```
+GET  /api/catalog                          -> 200 {"platform_fee_percent": int, "apps": [AppPublic...]}  (listed apps only)
+GET  /api/apps/{id}                        -> 200 AppPublic (listed or not), 404 unknown
+POST /api/sellers                          (no auth, empty JSON body)
+                                            -> 201 {"seller_id","seller_token","onboarding_url"}
+GET  /api/sellers/me                       (Authorization: Bearer <seller_token>)
+                                            -> 200 {"seller_id","charges_enabled","onboarding_url","apps":[AppPublic...]}
+POST /api/apps                             (Bearer) {"id": "my-app-name"}
+                                            -> 201 AppPublic; 409 if taken/reserved; 400 invalid
+PUT  /api/apps/{id}                        (Bearer, owner) {"name","description","homepage","price_usd_cents"}
+                                            -> 200 AppPublic
+POST /api/apps/{id}/test-license           (Bearer, owner) -> 200 {"license_key": "SHRW1..."} (license kind "test")
+POST /api/admin/apps/{id}/listed           (Authorization: Bearer <admin token>) {"listed": true|false}
+                                            -> 200 AppPublic
+```
+
+`AppPublic = {"id","name","description","homepage","price_usd_cents","listed"}`.
+
+App id rule: `^[a-z0-9-]{3,64}$`, no leading/trailing hyphen. The server also
+enforces a reserved-names list.
+
+Error responses: `{"error": "message"}`, matching §3's convention.
+
+```
+omarket sell init            # POST /api/sellers (or GET /api/sellers/me if
+                             # already initialized); saves seller_token;
+                             # opens onboarding_url; polls /api/sellers/me
+                             # until charges_enabled (~5 min timeout, not
+                             # an error — reprints the URL to finish later)
+omarket sell claim <app-id>  # POST /api/apps; generates a template
+                             # omarket.json manifest in the cwd
+omarket sell push            # reads ./omarket.json; PUT /api/apps/{id};
+                             # refuses to push while template placeholder
+                             # values remain
+omarket sell testkey [app]   # POST /api/apps/{id}/test-license; saves and
+                             # locally verifies the key
+omarket sell status          # GET /api/sellers/me
+omarket admin listed <app-id> <true|false>   # POST /api/admin/apps/{id}/listed
+                                              # (OMARKET_ADMIN_TOKEN env; platform-operator only)
+```
