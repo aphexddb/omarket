@@ -37,8 +37,6 @@ func run(args []string) error {
 		return runDev(args[1:])
 	case "sell":
 		return runSell(args[1:])
-	case "admin":
-		return runAdmin(args[1:])
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
 		return nil

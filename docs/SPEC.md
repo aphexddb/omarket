@@ -125,12 +125,12 @@ omarket licenses             # list stored keys, verified status
 omarket dev onboard -email x # POST /api/dev/onboard, print/open the URL
 ```
 
-## 4. Selling and curation API
+## 4. Selling API
 
 A second, seller-facing API — separate from the catalog.json/buy flow in
-§2/§3 above — backs `omarket sell` and `omarket admin`. `AppPublic` here is
-distinct from the catalog `App` shape in §2: it's what a seller edits and an
-admin curates, not what a buyer browses.
+§2/§3 above — backs `omarket sell`. `AppPublic` here is distinct from the
+catalog `App` shape in §2: it's what a seller edits, not what a buyer
+browses.
 
 ```
 GET  /api/catalog                          -> 200 {"platform_fee_percent": int, "apps": [AppPublic...]}  (listed apps only)
@@ -144,8 +144,6 @@ POST /api/apps                             (Bearer) {"id": "my-app-name"}
 PUT  /api/apps/{id}                        (Bearer, owner) {"name","description","homepage","price_usd_cents"}
                                             -> 200 AppPublic
 POST /api/apps/{id}/test-license           (Bearer, owner) -> 200 {"license_key": "SHRW1..."} (license kind "test")
-POST /api/admin/apps/{id}/listed           (Authorization: Bearer <admin token>) {"listed": true|false}
-                                            -> 200 AppPublic
 ```
 
 `AppPublic = {"id","name","description","homepage","price_usd_cents","listed"}`.
@@ -154,6 +152,9 @@ App id rule: `^[a-z0-9-]{3,64}$`, no leading/trailing hyphen. The server also
 enforces a reserved-names list.
 
 Error responses: `{"error": "message"}`, matching §3's convention.
+
+Listing/curation (setting an app's `listed` flag) is performed by the
+platform operator with private tooling, not exposed in this CLI.
 
 ```
 omarket sell init            # POST /api/sellers (or GET /api/sellers/me if
@@ -169,6 +170,4 @@ omarket sell push            # reads ./omarket.json; PUT /api/apps/{id};
 omarket sell testkey [app]   # POST /api/apps/{id}/test-license; saves and
                              # locally verifies the key
 omarket sell status          # GET /api/sellers/me
-omarket admin listed <app-id> <true|false>   # POST /api/admin/apps/{id}/listed
-                                              # (OMARKET_ADMIN_TOKEN env; platform-operator only)
 ```

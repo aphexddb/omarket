@@ -6,10 +6,10 @@ import (
 	"net/url"
 )
 
-// AppPublic mirrors an app as served by the sell/admin API (the pinned
+// AppPublic mirrors an app as served by the sell API (the pinned
 // seller-facing contract). It is a distinct shape from App: App is the
-// catalog.json/buy-flow view (SPEC §2/§3), AppPublic is what sellers and
-// admins see when claiming, editing, and curating an app.
+// catalog.json/buy-flow view (SPEC §2/§3), AppPublic is what sellers see
+// when claiming and editing an app.
 type AppPublic struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
@@ -95,17 +95,4 @@ func (c *Client) CreateTestLicense(ctx context.Context, sellerToken, id string) 
 		return "", err
 	}
 	return out.LicenseKey, nil
-}
-
-// AdminSetListed curates whether app id appears in the browse catalog:
-// POST /api/admin/apps/{id}/listed. adminToken is the platform operator's
-// bearer token (OMARKET_ADMIN_TOKEN), not a seller token.
-func (c *Client) AdminSetListed(ctx context.Context, adminToken, id string, listed bool) (AppPublic, error) {
-	var out AppPublic
-	path := "/api/admin/apps/" + url.PathEscape(id) + "/listed"
-	body := map[string]bool{"listed": listed}
-	if err := c.doJSONAuth(ctx, http.MethodPost, path, adminToken, body, &out); err != nil {
-		return AppPublic{}, err
-	}
-	return out, nil
 }

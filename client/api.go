@@ -118,8 +118,8 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 }
 
 // doJSONAuth is doJSON with an optional bearer token attached as an
-// Authorization header (used by the sell/admin API; the buy/catalog API
-// above is unauthenticated). An empty bearerToken omits the header.
+// Authorization header (used by the sell API; the buy/catalog API above is
+// unauthenticated). An empty bearerToken omits the header.
 func (c *Client) doJSONAuth(ctx context.Context, method, path, bearerToken string, body, out any) error {
 	var reqBody io.Reader
 	if body != nil {

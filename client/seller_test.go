@@ -180,33 +180,3 @@ func TestCreateTestLicense(t *testing.T) {
 		t.Fatalf("key = %q", key)
 	}
 }
-
-func TestAdminSetListed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/admin/apps/hello-shareware/listed" {
-			http.NotFound(w, r)
-			return
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer admin_token_xyz" {
-			t.Errorf("Authorization header = %q", got)
-		}
-		var body map[string]bool
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Errorf("decode body: %v", err)
-		}
-		if !body["listed"] {
-			t.Errorf("listed body = %+v, want listed=true", body)
-		}
-		_ = json.NewEncoder(w).Encode(client.AppPublic{ID: "hello-shareware", Listed: true})
-	}))
-	defer srv.Close()
-
-	c := client.NewClient(srv.URL)
-	app, err := c.AdminSetListed(context.Background(), "admin_token_xyz", "hello-shareware", true)
-	if err != nil {
-		t.Fatalf("AdminSetListed: %v", err)
-	}
-	if !app.Listed {
-		t.Fatal("expected Listed=true")
-	}
-}
