@@ -122,7 +122,6 @@ omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrtermina
                              # poll /api/purchase/{token} every 2s (10 min timeout),
                              # save key to licenses/<app>.key, print it big and celebratory
 omarket licenses             # list stored keys, verified status
-omarket dev onboard -email x # POST /api/dev/onboard, print/open the URL
 ```
 
 ## 4. Selling API

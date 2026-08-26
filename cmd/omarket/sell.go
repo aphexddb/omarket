@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/aphexddb/omarket/client"
@@ -293,6 +295,23 @@ func runSellTestkey(args []string) error {
 	fmt.Printf("License key saved to %s\n", path)
 	fmt.Println("Your app now shows registered.")
 	return nil
+}
+
+// openBrowser best-effort opens url in the platform default browser. Errors
+// are ignored: the URL was already printed, so failing to auto-open is fine.
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("xdg-open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		return
+	}
+	_ = cmd.Start()
 }
 
 func requireSellerToken() (string, error) {

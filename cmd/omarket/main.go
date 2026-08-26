@@ -33,8 +33,6 @@ func run(args []string) error {
 		return runBuy(args[1:])
 	case "licenses":
 		return runLicenses(args[1:])
-	case "dev":
-		return runDev(args[1:])
 	case "sell":
 		return runSell(args[1:])
 	case "version", "-v", "--version":
@@ -57,7 +55,6 @@ func usage() {
   omarket install <app>
   omarket buy <app> [-email x]
   omarket licenses
-  omarket dev onboard -email x
   omarket sell init            start selling: Stripe onboarding in browser
   omarket sell claim <app-id>  claim an app id, generates omarket.json
   omarket sell push            push omarket.json (name/description/price)

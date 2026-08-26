@@ -10,7 +10,13 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/aphexddb/omarket/internal/version"
 )
+
+// userAgent identifies this CLI to the server, e.g.
+// "omarket/0.1.0 (+https://omarket.dev)".
+var userAgent = fmt.Sprintf("omarket/%s (+https://omarket.dev)", version.Version)
 
 // App mirrors a catalog entry as served by GET /catalog.json (SPEC §2/§3).
 type App struct {
@@ -43,11 +49,6 @@ type buyResponse struct {
 type purchaseResponse struct {
 	Status     string `json:"status"`
 	LicenseKey string `json:"license_key"`
-}
-
-type devOnboardResponse struct {
-	Account       string `json:"account"`
-	OnboardingURL string `json:"onboarding_url"`
 }
 
 type errorResponse struct {
@@ -102,17 +103,6 @@ func (c *Client) PollPurchase(ctx context.Context, token string) (status, licens
 	return out.Status, out.LicenseKey, nil
 }
 
-// DevOnboard creates (or resumes) a Stripe Connect Express account for a
-// developer and returns the account id and the onboarding URL to visit.
-func (c *Client) DevOnboard(ctx context.Context, email string) (account, onboardingURL string, err error) {
-	body := map[string]string{"email": email}
-	var out devOnboardResponse
-	if err := c.doJSON(ctx, http.MethodPost, "/api/dev/onboard", body, &out); err != nil {
-		return "", "", err
-	}
-	return out.Account, out.OnboardingURL, nil
-}
-
 func (c *Client) doJSON(ctx context.Context, method, path string, body, out any) error {
 	return c.doJSONAuth(ctx, method, path, "", body, out)
 }
@@ -134,6 +124,7 @@ func (c *Client) doJSONAuth(ctx context.Context, method, path, bearerToken strin
 	if err != nil {
 		return err
 	}
+	req.Header.Set("User-Agent", userAgent)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

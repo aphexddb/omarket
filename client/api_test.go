@@ -113,26 +113,3 @@ func TestPollPurchaseUnknownToken(t *testing.T) {
 		t.Fatal("expected error for unknown token")
 	}
 }
-
-func TestDevOnboard(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/dev/onboard" {
-			http.NotFound(w, r)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"account":        "acct_123",
-			"onboarding_url": "https://connect.stripe.com/setup/123",
-		})
-	}))
-	defer srv.Close()
-
-	c := client.NewClient(srv.URL)
-	account, onboardingURL, err := c.DevOnboard(context.Background(), "dev@example.com")
-	if err != nil {
-		t.Fatalf("DevOnboard: %v", err)
-	}
-	if account != "acct_123" || onboardingURL != "https://connect.stripe.com/setup/123" {
-		t.Fatalf("got account=%q url=%q", account, onboardingURL)
-	}
-}
