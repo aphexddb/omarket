@@ -1,23 +1,29 @@
-# omarchy-shareware — Platform Spec (v1)
+# omarket — platform spec (v1)
 
-Shareware for the terminal age. Devs ship real packages, users try everything, paying unlocks a signed offline license key.
+The contract between the `omarket` client, a `sharewared` server, and apps
+that check licenses. Three primitives: a catalog the client fetches, a
+purchase that ends in a signed key file on the buyer's disk, and a seller
+API behind `omarket sell`.
 
-How it works:
-- Dev lists an app (ex: using Stripe Connect), buyer pays `price_cents`
-- Platform takes 5%. Stripe's processing fees, risk radar, etc. come out of the platform (the merchant of record). Stripe pays the developer directly
-- Dev nets 95%. No subscriptions required, no DRM.
+Money, once: the buyer pays `price_cents` through Stripe Checkout. The
+platform is the merchant of record, keeps a flat 5%, and pays Stripe's
+processing fees out of that 5%. Stripe transfers the remaining 95% to the
+developer's Connect account directly.
 
 ## 1. License key format (`SHRW1`)
 
-A license key is a compact, offline-verifiable string:
+A license key is an offline-verifiable string:
 
 ```
 SHRW1.<base64url(payload JSON, no padding)>.<base64url(ed25519 signature, no padding)>
 ```
 
-- Signature is Ed25519 over the **exact payload bytes** (the JSON as encoded, not re-marshaled).
-- Signed by the **platform root key**. Apps embed the platform public key and verify offline.
-- No phone-home. No expiry by default. Keys live in `~/.config/shareware/licenses/<app>.key`.
+- The signature is Ed25519 over the **exact payload bytes** — the JSON as
+  encoded, not re-marshaled.
+- Signed by the platform root key. Apps embed the platform public key and
+  verify offline. No phone-home, no expiry by default.
+- Keys are stored at `~/.config/shareware/licenses/<app>.key`
+  (`os.UserConfigDir()/shareware/licenses` precisely).
 
 Payload JSON fields:
 
@@ -32,9 +38,10 @@ Payload JSON fields:
 }
 ```
 
-`kind` is `"personal"` or `"team"`.
+`kind` is `"personal"`, `"team"`, or `"test"` (test licenses come from
+`omarket sell testkey`, §4).
 
-### `license` package public API (packages compile against this)
+### `license` package public API (apps compile against this)
 
 ```go
 package license
@@ -54,7 +61,7 @@ var ErrBadSignature error   // signature check failed
 // GenerateKeypair returns a new ed25519 keypair.
 func GenerateKeypair() (pub ed25519.PublicKey, priv ed25519.PrivateKey, err error)
 
-// EncodeKey / DecodeKey: base64 (std, padded) <-> raw key bytes, for env vars and files.
+// Encode/Decode: base64 (std, padded) <-> raw key bytes, for env vars and files.
 func EncodePrivateKey(priv ed25519.PrivateKey) string
 func DecodePrivateKey(s string) (ed25519.PrivateKey, error)
 func EncodePublicKey(pub ed25519.PublicKey) string
@@ -73,19 +80,21 @@ func Sign(l License, priv ed25519.PrivateKey) (string, error)
 func Verify(key string, pub ed25519.PublicKey) (*License, error)
 ```
 
-Keypair generation and signing are platform-operator tooling (private,
-outside this repo). Buyers and sellers verify keys with `omarket verify`
-(§3) — no separate binary needed.
+Keypair generation and license signing are platform-operator tooling,
+outside this repo. Everyone else verifies: `omarket verify` (§3) for
+humans, `license.Verify` for apps.
 
 ## 2. Catalog
 
-`catalog/*.json`, one app per file, filename `<id>.json`. Curation = pull request.
+`catalog/*.json` in the server repo, one app per file, filename `<id>.json`.
+Curation is a pull request. The server loads the directory at boot
+(`CATALOG_DIR`, default `./catalog`) and serves it at `GET /catalog.json`.
 
 ```json
 {
   "id": "hello-shareware",
   "name": "Hello Shareware",
-  "description": "One-line-ish description.",
+  "description": "What the app does, in one line.",
   "version": "1.0.0",
   "homepage": "https://example.com",
   "source": "https://github.com/aphexddb/omarket",
@@ -98,58 +107,58 @@ outside this repo). Buyers and sellers verify keys with `omarket verify`
 }
 ```
 
-- `price_cents: 0` = free (no buy flow).
+- `price_cents: 0` — free; no buy flow.
 - `kind`: `"source-included"` (featured tier) or `"closed"`.
-- `stripe_account`: the dev's Stripe Connect account id; required when `price_cents > 0`.
-- `pkgname`: Arch package name; `omarket install` shells out to `sudo pacman -S <pkgname>` (fall back to `yay -S` if pacman lacks it; on non-Arch, print the command instead).
-
-Server loads the catalog directory at boot (`CATALOG_DIR`, default `./catalog`).
+- `stripe_account`: the dev's Stripe Connect account id. Required when
+  `price_cents > 0`.
+- `pkgname`: Arch package name. `omarket install` runs
+  `sudo pacman -S <pkgname>`, falls back to `yay -S`, and on systems with
+  neither prints the command instead of running it.
 
 ## 3. Client (`omarket`)
 
-Default server `https://omarket.dev` (the canonical instance). This is overridable with `--server` or setting `OMARKET_SERVER`. All licenses are stored in `licenses/<app>.key`.
+Default server: `https://omarket.dev`. Override with `-server` or
+`OMARKET_SERVER`. Licenses are read and written under
+`~/.config/shareware/licenses/<app>.key` (§1).
 
 Five top-level commands: `buy`, `sell`, `licenses`, `verify`, `version`.
 
 ```
-omarket                      # main TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
+omarket                      # TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
 omarket buy                  # plain table of the catalog (no app id given)
 omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrterminal),
                              # poll /api/purchase/{token} every 2s (10 min timeout),
-                             # save key to licenses/<app>.key, print it big and celebratory
-omarket licenses             # list stored keys, verified status
+                             # save the key to licenses/<app>.key, print the path
+omarket licenses             # list stored keys with verified status
 omarket verify <key|path|-> [-server <url>]
-                             # verify a SHRW1 license key: arg is the key
-                             # itself, a path to a key file, or "-" for
-                             # stdin. Fully offline by default (checks
-                             # SHAREWARE_PUBLIC_KEY, else the baked-in
-                             # platform key); -server fetches and verifies
-                             # against that server's GET /api/pubkey key(s)
-                             # instead.
-omarket version               # print the version
+                             # verify a SHRW1 key: the arg is the key itself,
+                             # a path to a key file, or "-" for stdin. Offline
+                             # by default: SHAREWARE_PUBLIC_KEY if set, else
+                             # the baked-in platform key. -server instead
+                             # fetches that server's GET /api/pubkey and
+                             # verifies against its key(s).
+omarket version              # print the version
 ```
 
-`omarket list` (bare catalog table), `omarket info <app>` (single-app detail),
-and `omarket install <app>` (pacman/yay shell-out; also reachable as "i" in
-the TUI) still work exactly as before — they're just no longer advertised in
-`omarket -h`, having been superseded by (`list`) or folded alongside (`info`,
-`install`) the five top-level commands above.
+`omarket list`, `omarket info <app>`, and `omarket install <app>` still work
+but are no longer advertised in `omarket -h`: `list` is `buy` with no
+arguments, and `info`/`install` are reachable from the TUI.
 
 `GET /api/pubkey` -> `200 {"public_key","key_id","fingerprint","keys":[{"key_id","algorithm","public_key","fingerprint"}]}`.
-`public_key` is standard base64; `key_id` is `pk_` + the first 12 lowercase
-hex chars of `sha256(raw public key bytes)`; `fingerprint` is
-`SHA256:<full lowercase hex digest>`. The top-level fields mirror `keys[0]`
-for older clients; `omarket verify -server` walks `keys[]` and verifies
-against each entry until one matches. A server that predates `keys[]`
-(top-level fields only) is still supported: `omarket verify` falls back to
-the top-level `public_key`.
+
+- `public_key`: standard base64.
+- `key_id`: `pk_` + first 12 lowercase hex chars of `sha256(raw public key bytes)`.
+- `fingerprint`: `SHA256:<full lowercase hex digest>`.
+- The top-level fields mirror `keys[0]`, for older clients. `omarket verify
+  -server` walks `keys[]` and accepts the first entry that verifies; against
+  a server that predates `keys[]` it falls back to the top-level
+  `public_key`.
 
 ## 4. Selling API
 
-A second, seller-facing API — separate from the catalog.json/buy flow in
-§2/§3 above — backs `omarket sell`. `AppPublic` here is distinct from the
-catalog `App` shape in §2: it's what a seller edits, not what a buyer
-browses.
+The seller-facing API behind `omarket sell`, separate from the
+catalog.json/buy flow in §2/§3. `AppPublic` is what a seller edits, not
+what a buyer browses; it is distinct from the catalog `App` shape in §2.
 
 ```
 GET  /api/catalog                          -> 200 {"platform_fee_percent": int, "apps": [AppPublic...]}  (listed apps only)
@@ -179,34 +188,33 @@ POST /api/apps/{id}/test-license           (Bearer, owner) -> 200 {"license_key"
 
 `AppPublic = {"id","name","description","homepage","price_usd_cents","listed"}`.
 
-App id rule: `^[a-z0-9-]{3,64}$`, no leading/trailing hyphen. The server also
-enforces a reserved-names list.
+App id rule: `^[a-z0-9-]{3,64}$`, no leading or trailing hyphen. The server
+also enforces a reserved-names list.
 
 Error responses: `{"error": "message"}`, matching §3's convention.
 
-Listing/curation (setting an app's `listed` flag) is performed by the
-platform operator with private tooling, not exposed in this CLI.
+Setting an app's `listed` flag — curation — is done by the platform
+operator with private tooling. It is not exposed in this CLI.
 
 ```
 omarket sell init            # POST /api/sellers (or GET /api/sellers/me if
                              # already initialized); saves seller_token.
-                             # Instant — no Stripe involved.
-omarket sell claim <app-id>  # POST /api/apps; generates a template
-                             # omarket.json manifest in the cwd
-omarket sell push            # reads ./omarket.json; PUT /api/apps/{id};
-                             # refuses to push while template placeholder
+                             # No Stripe involved.
+omarket sell claim <app-id>  # POST /api/apps; writes a template
+                             # omarket.json manifest to the cwd
+omarket sell push            # reads ./omarket.json; PUT /api/apps/{id}.
+                             # Refuses to push while template placeholder
                              # values remain. If the pushed price is > 0 and
                              # payouts aren't set up, prints a hint to run
-                             # `omarket sell payouts` (does not auto-open a
+                             # `omarket sell payouts` (never auto-opens a
                              # browser)
-omarket sell testkey [app]   # POST /api/apps/{id}/test-license; saves and
-                             # locally verifies the key
+omarket sell testkey [app]   # POST /api/apps/{id}/test-license; verifies the
+                             # key locally, then saves it
 omarket sell payouts         # POST /api/sellers/payouts; opens the returned
                              # onboarding_url in the browser and polls
                              # /api/sellers/me until charges_enabled (~5 min
-                             # timeout, not an error — reprints how to
-                             # re-check later). If already enabled, says so
-                             # and exits. 503 means the server has no Stripe
-                             # configured.
+                             # timeout — not an error; prints how to re-check
+                             # later). If already enabled, says so and exits.
+                             # 503 means the server has no Stripe configured.
 omarket sell status          # GET /api/sellers/me
 ```

@@ -1,10 +1,10 @@
 # omarket
 
-Shareware for the terminal age, built for Omarchy.
+A CLI to publish shareware and buy a DRM-free license. Built for Omarchy;
+works in any terminal.
 
-Try apps free, forever. Paying unlocks an offline, Ed25519-signed license key. No phone-home, no DRM, no accounts. 
-
-Learn more at [omarchyshareware.com](https://github.com/aphexddb/omarchyshareware.com).
+Try the binary free. Pay for a key file. Keep the bits. The canonical
+server is [omarket.dev](https://omarket.dev).
 
 ## Install
 
@@ -15,49 +15,56 @@ curl -sL https://github.com/aphexddb/omarket/releases/latest/download/omarket_li
 sudo install -m755 omarket /usr/local/bin/omarket
 ```
 
-darwin and windows archives (amd64/arm64) are published too — see the [latest release](https://github.com/aphexddb/omarket/releases/latest).
-
-Or build from source with Go:
+darwin and windows archives (amd64/arm64) are published too — see the
+[latest release](https://github.com/aphexddb/omarket/releases/latest).
+Or build from source:
 
 ```bash
 go install github.com/aphexddb/omarket/cmd/omarket@latest
 ```
 
-## Buying shareware is easy
-
-Install the binary (above), then:
+## Buy
 
 ```bash
-omarket buy                 # plain-text catalog
-omarket buy hello-shareware # Stripe checkout via URL/QR, polls, saves your key
+omarket buy                 # plain table of the catalog
+omarket buy hello-shareware # prints a Stripe Checkout URL and QR, polls, writes your key
 ```
 
-Your license lands in `~/.config/shareware/licenses/<app>.key`. Apps verify it fully offline — the platform's Ed25519 public key ships baked into the `omarket` binary, so there's zero configuration on your end.
+Paid → the license is written to `~/.config/shareware/licenses/<app>.key`.
+It is a file: `SHRW1.payload.sig`, Ed25519-signed. Apps verify it against
+the platform public key baked into the binary — offline, no account, no
+phone-home after purchase.
 
 ```bash
 omarket                # TUI — browse, enter for detail, b to buy, i to install
 omarket install <app>  # pacman -S (falls back to yay, or prints the command)
-omarket licenses       # list stored keys, verified status
-omarket verify <app>.key   # re-verify a key offline, anytime
+omarket licenses       # list stored keys with verified status
+omarket verify <key|path|->  # re-verify a key offline, any time
 ```
 
-The client talks to `https://omarket.dev` by default; point it elsewhere with `OMARKET_SERVER` or `--server`.
+The client talks to `https://omarket.dev` by default; point it at another
+server with `-server` or `OMARKET_SERVER`.
 
-## Selling shareware is easy
+## Sell
 
 ```bash
-omarket sell init          # once: instant, no Stripe needed
-omarket sell claim my-app-name # generates template omarket.json manifest
-omarket sell push          # reads omarket.json manifest: name, price, description. wont push a template version!
-omarket sell testkey       # your app now shows "registered" locally
-omarket sell payouts       # when ready to get paid: Stripe onboarding in browser
+omarket sell init            # create a seller account; token written to disk
+omarket sell claim my-app    # claim the id; generates an omarket.json manifest
+omarket sell push            # upload name, description, price from omarket.json
+omarket sell testkey         # mint a test license; your app shows registered
+omarket sell payouts         # Stripe Express onboarding, when you want to get paid
 ```
 
-Claimed apps can be bought immediately by exact name; appearing in the browse catalog is curated by the platform. The platform fee is public via `GET /api/catalog`.
+`push` refuses a manifest that still has template values. A pushed app is
+buyable by exact name immediately; the browse catalog is curated by the
+platform. The fee is a flat 5%, public via `GET /api/catalog`, and Stripe's
+processing fee comes out of the platform's side.
 
 ## Packages
 
-- `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib  `crypto/ed25519`; verification works fully offline. Import this to check licenses in your own app.
+- `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib
+  `crypto/ed25519`; verification is fully offline. Import this to check
+  licenses in your own app.
 - `client/` — catalog fetch, buy flow, license store; what the CLI is built on.
 
 The license format and API contract live in [`docs/SPEC.md`](docs/SPEC.md).
@@ -68,8 +75,8 @@ The license format and API contract live in [`docs/SPEC.md`](docs/SPEC.md).
 go build ./...
 ```
 
-Version lives in [`VERSION`](VERSION). Tag `v$(cat VERSION)` to cut a release
-via GoReleaser.
+Version lives in [`VERSION`](VERSION). Tag `v$(cat VERSION)` to cut a
+release via GoReleaser.
 
 ## License
 
