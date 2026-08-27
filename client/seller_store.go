@@ -9,7 +9,10 @@ import (
 
 const sellerTokenFileMode = 0o600
 
-func sellerTokenPath() (string, error) {
+// SellerTokenPath is the on-disk path of the seller bearer token:
+// ConfigDir()/seller_token. On Linux that is typically
+// ~/.config/shareware/seller_token; XDG_CONFIG_HOME and other OSes move it.
+func SellerTokenPath() (string, error) {
 	dir, err := ConfigDir()
 	if err != nil {
 		return "", err
@@ -17,8 +20,8 @@ func sellerTokenPath() (string, error) {
 	return filepath.Join(dir, "seller_token"), nil
 }
 
-// SaveSellerToken writes the seller token to ConfigDir()/seller_token
-// (0600), creating the config directory if needed.
+// SaveSellerToken writes the seller token to SellerTokenPath() (0600),
+// creating the config directory if needed.
 func SaveSellerToken(token string) error {
 	dir, err := ConfigDir()
 	if err != nil {
@@ -27,7 +30,7 @@ func SaveSellerToken(token string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	path, err := sellerTokenPath()
+	path, err := SellerTokenPath()
 	if err != nil {
 		return err
 	}
@@ -37,7 +40,7 @@ func SaveSellerToken(token string) error {
 // LoadSellerToken reads the stored seller token. A missing file is not an
 // error; it yields an empty string.
 func LoadSellerToken() (string, error) {
-	path, err := sellerTokenPath()
+	path, err := SellerTokenPath()
 	if err != nil {
 		return "", err
 	}

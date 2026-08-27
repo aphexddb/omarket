@@ -82,6 +82,10 @@ func runSellInit(args []string) error {
 	}
 
 	fmt.Println(successStyle.Render("★ Seller account created: " + acct.SellerID + " ★"))
+	if path, err := client.SellerTokenPath(); err == nil {
+		fmt.Println("Token written to " + path)
+		fmt.Println(mutedStyle.Render("Back that file up. The server cannot restore it."))
+	}
 	printSellNextSteps()
 	return nil
 }
