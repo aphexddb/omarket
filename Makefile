@@ -2,6 +2,7 @@ MODULE  := github.com/aphexddb/omarket
 VERSION := $(shell cat VERSION)
 COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    := $(shell date -u +%Y-%m-%d)
+BIN     := omarket$(shell go env GOEXE)
 
 LDFLAGS := -s -w \
 	-X $(MODULE)/internal/version.Version=$(VERSION) \
@@ -10,7 +11,7 @@ LDFLAGS := -s -w \
 
 .PHONY: build test examples
 build:
-	go build -trimpath -ldflags "$(LDFLAGS)" -o omarket ./cmd/omarket
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/omarket
 
 test:
 	go test ./...
