@@ -38,7 +38,7 @@ phone-home after purchase. [`examples/`](examples) shows how, in four
 languages.
 
 ```bash
-omarket                # TUI — browse, enter for detail, b to buy, i to install
+omarket                # TUI: browse, enter for detail, b to buy, i to install
 omarket install <app>  # omarchy pkg add, then pacman, then yay
 omarket licenses       # list stored keys with verified status
 omarket verify <key|path|->  # re-verify a key offline, any time
@@ -55,13 +55,31 @@ omarket sell claim my-app    # claim the id; generates an omarket.json manifest
 omarket sell push            # upload name, description, price, ware from omarket.json
 omarket sell testkey         # mint a test license; your app shows registered
 omarket sell payouts         # Stripe Express onboarding, when you want to get paid
+omarket sell stats           # licenses sold, per app
 ```
 
-The manifest carries `ware` — the "-ware" tradition your listing follows
-(`shareware`, `beerware`, `coffeeware`, `charityware`, or one you invent) —
+The manifest carries `ware`, the "-ware" tradition your listing follows
+(`shareware`, `beerware`, `coffeeware`, `charityware`, or one you invent),
 plus the one-line `comment` that says what you're asking for and the
-`author` handle, pre-filled from your git config. `comment` and `author` are
-required; `ware` defaults to `shareware`.
+`author` handle. `comment` and `author` are required; `ware` defaults to
+`shareware`.
+
+### Pricing, including free
+
+`price_usd_cents` is either `0` or at least `100` ($1.00). Set it to `0` and
+the ware *is* the ask: no payment, no Stripe account needed, and a buyer sees
+your ware and comment instead of a checkout page. That's postcardware,
+beerware, careware, the older half of the tradition. Below a dollar, card
+fees eat most of the charge, so `1`–`99` is refused.
+
+### Your email is not published without asking
+
+`claim` looks in git config for an author to pre-fill. A `github.user` handle
+is used as-is; it's already public. The universal fallback, `user.email`, is
+a personal address, so the CLI shows it and asks first; decline (or run
+unattended) and the field is left blank for you to fill in. `push` asks once
+more if the author field looks like an email address, whatever put it there.
+Pass `-yes` to a scripted push to say the address is meant to be public.
 
 `push` refuses a manifest that still has template values. A pushed app is
 buyable by exact name immediately; the browse catalog is curated by the
@@ -93,7 +111,7 @@ cd examples/c && make demo
 
 ## Packages
 
-- `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib
+- `license/`, the `SHRW1` key format: sign, verify, keygen. Pure stdlib
   `crypto/ed25519`; verification is fully offline. Import this to check
   licenses in your own app.
 - `client/` — catalog fetch, buy flow, license store; what the CLI is built on.
