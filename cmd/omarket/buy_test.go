@@ -16,7 +16,7 @@ func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
 	var hitCatalog bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/catalog.json":
+		case "/api/catalog.json":
 			hitCatalog = true
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"apps": []map[string]any{
@@ -24,7 +24,7 @@ func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
 				},
 			})
 		default:
-			t.Errorf("buy with no app arg should only hit /catalog.json, got %s", r.URL.Path)
+			t.Errorf("buy with no app arg should only hit /api/catalog.json, got %s", r.URL.Path)
 			http.NotFound(w, r)
 		}
 	}))
@@ -34,7 +34,7 @@ func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
 		t.Fatalf("runBuy (no app arg): %v", err)
 	}
 	if !hitCatalog {
-		t.Fatal("runBuy with no app arg never hit /catalog.json")
+		t.Fatal("runBuy with no app arg never hit /api/catalog.json")
 	}
 }
 
@@ -42,7 +42,7 @@ func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
 // still works and hits the same endpoint as `omarket buy` with no args.
 func TestRunListIsHiddenAliasForCatalog(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/catalog.json" {
+		if r.URL.Path != "/api/catalog.json" {
 			http.NotFound(w, r)
 			return
 		}
@@ -77,8 +77,8 @@ func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 			"license_key": "SHRW1.payload.sig",
 		})
 	})
-	mux.HandleFunc("/catalog.json", func(w http.ResponseWriter, r *http.Request) {
-		t.Error("buy with an app arg should not hit /catalog.json")
+	mux.HandleFunc("/api/catalog.json", func(w http.ResponseWriter, r *http.Request) {
+		t.Error("buy with an app arg should not hit /api/catalog.json")
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()

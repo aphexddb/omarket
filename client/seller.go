@@ -8,7 +8,7 @@ import (
 
 // AppPublic mirrors an app as served by the sell API (the pinned
 // seller-facing contract). It is a distinct shape from App: App is the
-// catalog.json/buy-flow view (SPEC §2/§3), AppPublic is what sellers see
+// /api/catalog.json buy-flow view (SPEC §2/§3), AppPublic is what sellers see
 // when claiming and editing an app.
 type AppPublic struct {
 	ID            string `json:"id"`

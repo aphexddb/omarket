@@ -88,7 +88,14 @@ humans, `license.Verify` for apps.
 
 `catalog/*.json` in the server repo, one app per file, filename `<id>.json`.
 Curation is a pull request. The server loads the directory at boot
-(`CATALOG_DIR`, default `./catalog`) and serves it at `GET /catalog.json`.
+(`CATALOG_DIR`, default `./catalog`) and serves it at `GET /api/catalog.json`.
+
+`GET /catalog.json` is the former path and now answers `301 Moved
+Permanently` with `Location: /api/catalog.json`. Clients through v0.1.0
+request the old path and follow the redirect; from v0.2 the client requests
+`/api/catalog.json` directly. The body and shape are the same either way.
+Not to be confused with `GET /api/catalog` (§4), a different endpoint in a
+different shape.
 
 ```json
 {
@@ -106,7 +113,8 @@ Curation is a pull request. The server loads the directory at boot
   "ware": "shareware",
   "comment": "Try it free. Buy a key if you keep it around.",
   "author": "aphexddb",
-  "tags": ["demo"]
+  "tags": ["demo"],
+  "listed": false
 }
 ```
 
@@ -125,12 +133,21 @@ Curation is a pull request. The server loads the directory at boot
 - `pkgname`: Arch package name. `omarket install` runs
   `sudo pacman -S <pkgname>`, falls back to `yay -S`, and on systems with
   neither prints the command instead of running it.
+- `listed`: optional, seed-file only — it is never served in
+  `/api/catalog.json`, and clients never see it. It states whether the app
+  belongs in the browse catalog when the server first seeds it; absent, a
+  reserved id seeds unlisted and everything else seeds listed. Either way an
+  app priced below the platform minimum seeds unlisted. Seeding only ever
+  creates rows the server doesn't have yet, so this decides nothing about an
+  app that already exists. The platform repo owns the details.
 
 ## 3. Client (`omarket`)
 
 Default server: `https://omarket.dev`. Override with `-server` or
 `OMARKET_SERVER`. Licenses are read and written under
-`~/.config/shareware/licenses/<app>.key` (§1).
+`~/.config/shareware/licenses/<app>.key` (§1). Every command that reads the
+catalog — the TUI, `buy` with no app id, `list`, `info`, `install` — fetches
+`GET /api/catalog.json` (§2).
 
 Five top-level commands: `buy`, `sell`, `licenses`, `verify`, `version`.
 

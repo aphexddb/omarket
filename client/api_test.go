@@ -12,7 +12,7 @@ import (
 
 func TestGetCatalog(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/catalog.json" {
+		if r.URL.Path != "/api/catalog.json" {
 			http.NotFound(w, r)
 			return
 		}

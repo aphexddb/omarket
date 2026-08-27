@@ -18,7 +18,7 @@ import (
 // "omarket/0.1.0 (+https://omarket.dev)".
 var userAgent = fmt.Sprintf("omarket/%s (+https://omarket.dev)", version.Version)
 
-// App mirrors a catalog entry as served by GET /catalog.json (SPEC §2/§3).
+// App mirrors a catalog entry as served by GET /api/catalog.json (SPEC §2/§3).
 type App struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
@@ -109,7 +109,7 @@ func NewClient(baseURL string) *Client {
 // GetCatalog fetches the full app catalog.
 func (c *Client) GetCatalog(ctx context.Context) ([]App, error) {
 	var out catalogResponse
-	if err := c.doJSON(ctx, http.MethodGet, "/catalog.json", nil, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, "/api/catalog.json", nil, &out); err != nil {
 		return nil, err
 	}
 	return out.Apps, nil
