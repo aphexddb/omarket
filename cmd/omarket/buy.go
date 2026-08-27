@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/aphexddb/omarket/client"
@@ -178,9 +179,31 @@ const buyUnavailableMsg = "this listing isn't accepting payments right now"
 // the edge talking, not the API, and deserves the same friendly fallback.
 var edgeErrorPage = regexp.MustCompile(`^error code: \d+$`)
 
+// isEdgeError reports whether msg is the CDN talking, not sharewared.
+// Cloudflare has two 502 bodies we have actually seen: plain
+// "error code: 502", and RFC 7807 problem+json whose type URL is
+// developers.cloudflare.com — the one that printed as
+// `Couldn't buy omarket — {"type":"https://developers.cloudflare.com/...`.
+func isEdgeError(msg string) bool {
+	if msg == "" || msg == "failed to create checkout session" {
+		return true
+	}
+	if edgeErrorPage.MatchString(msg) {
+		return true
+	}
+	if strings.Contains(msg, "developers.cloudflare.com") {
+		return true
+	}
+	if strings.HasPrefix(strings.TrimSpace(msg), "{") {
+		return true
+	}
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "<html") || strings.Contains(lower, "<!doctype")
+}
+
 // buyStartError turns a failed POST /api/buy into a buyer-facing sentence.
-// Cloudflare rewrites origin 502s into a body-less "error code: 502" page,
-// which is why older builds printed "POST /api/buy: unexpected status 502".
+// Cloudflare rewrites origin 502s into an error page (plain text or
+// problem+json), which is why a raw HTTPError used to leak into the TUI.
 func buyStartError(appID string, err error) error {
 	var herr *client.HTTPError
 	if !errors.As(err, &herr) {
@@ -191,7 +214,7 @@ func buyStartError(appID string, err error) error {
 		return fmt.Errorf("%q isn't in the catalog", appID)
 	case http.StatusConflict, http.StatusBadGateway, http.StatusServiceUnavailable:
 		msg := herr.Message
-		if msg == "" || msg == "failed to create checkout session" || edgeErrorPage.MatchString(msg) {
+		if isEdgeError(msg) {
 			msg = buyUnavailableMsg
 		}
 		return fmt.Errorf("couldn't buy %s: %s", appID, msg)

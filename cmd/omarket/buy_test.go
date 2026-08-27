@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aphexddb/omarket/client"
@@ -143,6 +144,31 @@ func TestRunBuyCheckoutUnavailable(t *testing.T) {
 	}
 }
 
+func TestRunBuyCheckoutUnavailableProblemJSON(t *testing.T) {
+	// Cloudflare's other 502 body: RFC 7807 problem+json. This is the one
+	// that printed `Couldn't buy omarket — {"type":"https://developers.cloudflare.com/...`.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/buy", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-502/","title":"Bad Gateway","status":502}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	err := runBuy([]string{"-server", srv.URL, "omarket"})
+	if err == nil {
+		t.Fatal("expected buy to fail")
+	}
+	got := err.Error()
+	if got != "couldn't buy omarket: this listing isn't accepting payments right now" {
+		t.Fatalf("got %q", got)
+	}
+	if strings.Contains(got, "cloudflare") || strings.Contains(got, `"type"`) {
+		t.Fatalf("leaked edge JSON: %q", got)
+	}
+}
+
 func TestBuyStartError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -153,6 +179,14 @@ func TestBuyStartError(t *testing.T) {
 		{
 			name: "cloudflare 502",
 			err:  &client.HTTPError{Method: "POST", Path: "/api/buy", StatusCode: 502},
+			want: "couldn't buy omarket: this listing isn't accepting payments right now",
+		},
+		{
+			name: "cloudflare problem+json",
+			err: &client.HTTPError{
+				Method: "POST", Path: "/api/buy", StatusCode: 502,
+				Message: `{"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-502/","title":"Bad Gateway","status":502}`,
+			},
 			want: "couldn't buy omarket: this listing isn't accepting payments right now",
 		},
 		{

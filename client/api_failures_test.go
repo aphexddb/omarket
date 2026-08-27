@@ -69,13 +69,14 @@ func TestHTTPErrorCarriesStatusAndMessage(t *testing.T) {
 // leaving the user with a bare "unexpected status 502".
 func TestHTTPErrorNonJSONBodies(t *testing.T) {
 	cases := map[string]struct{ contentType, body string }{
-		"html error page":   {"text/html", "<!doctype html><html><body><h1>502 Bad Gateway</h1></body></html>"},
-		"plain text":        {"text/plain", "upstream connect error"},
-		"empty body":        {"application/json", ""},
-		"json but not ours": {"application/json", `{"detail":"something else entirely"}`},
-		"json null":         {"application/json", `null`},
-		"json array":        {"application/json", `["nope"]`},
-		"truncated json":    {"application/json", `{"error":"trunc`},
+		"html error page":         {"text/html", "<!doctype html><html><body><h1>502 Bad Gateway</h1></body></html>"},
+		"plain text":              {"text/plain", "upstream connect error"},
+		"empty body":              {"application/json", ""},
+		"json but not ours":       {"application/json", `{"detail":"something else entirely"}`},
+		"cloudflare problem+json": {"application/problem+json", `{"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-502/","title":"Bad Gateway","status":502}`},
+		"json null":               {"application/json", `null`},
+		"json array":              {"application/json", `["nope"]`},
+		"truncated json":          {"application/json", `{"error":"trunc`},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -95,6 +96,9 @@ func TestHTTPErrorNonJSONBodies(t *testing.T) {
 			}
 			if strings.Contains(msg, "\n") || strings.Contains(msg, "\r") {
 				t.Errorf("Error() = %q, want a single line", msg)
+			}
+			if strings.Contains(herr.Message, "developers.cloudflare.com") || strings.Contains(herr.Message, `"type"`) {
+				t.Errorf("Message = %q, want no Cloudflare problem+json leak", herr.Message)
 			}
 		})
 	}

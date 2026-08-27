@@ -491,14 +491,19 @@ func (c *Client) doJSONWith(ctx context.Context, httpClient *http.Client, method
 }
 
 // errorMessage extracts something worth showing from an error response
-// body. The API's own {"error":"..."} shape wins; failing that, a sanitized
-// snippet of whatever did arrive, which is how an HTML error page from a
-// proxy stops being indistinguishable from a silent API rejection. An empty
-// body yields "", and HTTPError.Error falls back to naming the status alone.
+// body. The API's own {"error":"..."} shape wins. JSON that isn't that
+// shape — Cloudflare's problem+json 502 page is the one that bit us —
+// is not an API message, so Message stays empty and callers fall back
+// to the status. Anything else (HTML, "error code: 502") is quoted as a
+// sanitized snippet so a proxy page isn't indistinguishable from silence.
 func errorMessage(raw []byte) string {
+	trimmed := bytes.TrimSpace(raw)
 	var e errorResponse
-	if err := json.Unmarshal(raw, &e); err == nil && e.Error != "" {
+	if err := json.Unmarshal(trimmed, &e); err == nil && e.Error != "" {
 		return sanitize(e.Error)
+	}
+	if json.Valid(trimmed) {
+		return ""
 	}
 	return sanitize(string(raw))
 }

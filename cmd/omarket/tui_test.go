@@ -184,7 +184,10 @@ func TestBuyFailureStaysInTUI(t *testing.T) {
 
 	updated, quit := got.Update(buyResultMsg{
 		app: "super-grep-deluxe-professional",
-		err: buyStartError("omarket", &client.HTTPError{Method: "POST", Path: "/api/buy", StatusCode: 502}),
+		err: buyStartError("omarket", &client.HTTPError{
+			Method: "POST", Path: "/api/buy", StatusCode: 502,
+			Message: `{"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-502/"}`,
+		}),
 	})
 	got = updated.(model)
 	if quit != nil {
@@ -208,6 +211,9 @@ func TestBuyFailureStaysInTUI(t *testing.T) {
 	}
 	if strings.Contains(plain, "unexpected status") {
 		t.Fatalf("status line leaked HTTP internals:\n%s", plain)
+	}
+	if strings.Contains(plain, "cloudflare") || strings.Contains(plain, `"type"`) {
+		t.Fatalf("status line leaked Cloudflare JSON:\n%s", plain)
 	}
 
 	cleared, _ := got.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
