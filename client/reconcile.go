@@ -49,7 +49,7 @@ type ReconcileResult struct {
 }
 
 // Reconcile resolves up to reconcileMaxRecords pending purchase records
-// (oldest first), each against its own recorded server (SPEC §5.4):
+// (oldest first), each against its own recorded server:
 //
 //   - complete            -> verify-then-save the license, delete the record
 //   - pending              -> keep

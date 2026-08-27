@@ -212,7 +212,7 @@ func TestWaitPurchaseUsesDedicatedClient(t *testing.T) {
 }
 
 // TestWaitPurchaseInterval checks a pending long-poll body's optional
-// interval field is surfaced to the caller (SPEC §3.2's mid-wait cadence
+// interval field is surfaced to the caller (the mid-wait cadence
 // refresh).
 func TestWaitPurchaseInterval(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +234,7 @@ func TestWaitPurchaseInterval(t *testing.T) {
 }
 
 // TestHTTPErrorRetryAfterParsed checks the Retry-After response header
-// (seconds form) lands on HTTPError.RetryAfter (SPEC §3.4).
+// (seconds form) lands on HTTPError.RetryAfter.
 func TestHTTPErrorRetryAfterParsed(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "3")

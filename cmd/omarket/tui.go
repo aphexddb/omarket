@@ -87,8 +87,8 @@ func fetchCatalogCmd(c *client.Client) tea.Cmd {
 	}
 }
 
-// reconcileCmd resolves any pending purchase records in the background
-// (SPEC §5.4) — the same hook `runLicenses` runs at startup, minus the
+// reconcileCmd resolves any pending purchase records in the background —
+// the same hook `runLicenses` runs at startup, minus the
 // printed notices: the TUI's alt-screen has nowhere sane to put them
 // mid-render. A resolved purchase's license still lands on disk either way;
 // the catalog view picks up the new "owned" mark next launch. Errors are
@@ -157,7 +157,7 @@ type model struct {
 	installPkg string
 
 	action *tuiAction
-	stale  bool // catalog served from the offline disk cache (SPEC §5.5)
+	stale  bool // catalog served from the offline disk cache
 
 	width, height int
 }

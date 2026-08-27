@@ -17,7 +17,7 @@ const pendingFileMode = 0o600
 const PendingGrace = 3600 // seconds (1h)
 
 // PendingPurchase is a durable record of a purchase token whose outcome
-// isn't known yet: the guarantee layer (SPEC §5.4). It is saved to disk the
+// isn't known yet: the guarantee layer. It is saved to disk the
 // moment Buy returns a token — before the checkout URL is even printed —
 // so a purchase is never lost to a crash, Ctrl-C, sleep, or a timed-out
 // live wait: `omarket licenses` and the TUI reconcile it later.

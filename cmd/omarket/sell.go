@@ -16,8 +16,8 @@ import (
 	"github.com/aphexddb/omarket/client"
 )
 
-// sellStatusWaitPerRequest and sellStatusWaitCap back `sell status -wait`
-// (SPEC §5.6): long-poll GET /api/sellers/me?wait=N, re-issuing until
+// sellStatusWaitPerRequest and sellStatusWaitCap back `sell status -wait`:
+// long-poll GET /api/sellers/me?wait=N, re-issuing until
 // charges_enabled flips or the cap is reached. Vars, not consts, so tests
 // can shrink them.
 var (
@@ -185,7 +185,7 @@ func runSellStatus(args []string) error {
 	return nil
 }
 
-// waitSellerStatus long-polls GET /api/sellers/me?wait=N (SPEC §3.3) up to
+// waitSellerStatus long-polls GET /api/sellers/me?wait=N up to
 // sellStatusWaitCap, using the shared cadence/429 handling so an old server
 // (which ignores ?wait= and answers instantly) degrades to the same
 // decay+jitter floor as everywhere else instead of a hot loop. It returns

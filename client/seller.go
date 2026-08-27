@@ -10,7 +10,7 @@ import (
 
 // AppPublic mirrors an app as served by the sell API (the pinned
 // seller-facing contract). It is a distinct shape from App: App is the
-// /api/catalog.json buy-flow view (SPEC §2/§3), AppPublic is what sellers see
+// /api/catalog.json buy-flow view, AppPublic is what sellers see
 // when claiming and editing an app.
 type AppPublic struct {
 	ID            string `json:"id"`
@@ -63,7 +63,7 @@ func (c *Client) GetSellerMe(ctx context.Context, sellerToken string) (SellerMe,
 }
 
 // WaitSellerMe is GetSellerMe with a server-side long-poll hold: it sends
-// ?wait=<seconds> (SPEC §3.3), so the server may park the request until the
+// ?wait=<seconds>, so the server may park the request until the
 // seller's charges_enabled flips or wait elapses. It never mints an
 // onboarding link on this path — a pending response's OnboardingURL is
 // empty even mid-onboarding. Uses the dedicated long-poll client (see

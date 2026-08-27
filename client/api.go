@@ -22,10 +22,10 @@ var userAgent = fmt.Sprintf("omarket/%s (+https://omarket.dev)", version.Version
 
 // longPollExtra is added to a WaitPurchase/WaitSellerMe request's context
 // deadline on top of the requested wait, so the client's own deadline never
-// races the server's clamp (SPEC §3.2's 25s cap plus margin).
+// races the server's clamp (the 25s cap plus margin).
 const longPollExtra = 10 * time.Second
 
-// App mirrors a catalog entry as served by GET /api/catalog.json (SPEC §2/§3).
+// App mirrors a catalog entry as served by GET /api/catalog.json.
 type App struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
@@ -56,7 +56,7 @@ type catalogResponse struct {
 }
 
 // BuyRequest is the POST /api/buy request body. CallbackPort/CallbackNonce
-// are optional (SPEC §3.1): when CallbackPort is zero, neither field is
+// are optional: when CallbackPort is zero, neither field is
 // sent, and the server builds its usual success_url with no loopback
 // redirect.
 type BuyRequest struct {
@@ -75,7 +75,7 @@ type BuyRequest struct {
 // come back on the free path so the CLI can show the person what the app
 // asks of them at the moment they acquire it.
 //
-// Interval/ExpiresIn are the server's cadence hints (SPEC §3.1) — zero when
+// Interval/ExpiresIn are the server's cadence hints — zero when
 // the server didn't send them (an old server, or a field it chose not to
 // set), in which case callers fall back to their own defaults.
 type BuyResult struct {
@@ -107,7 +107,7 @@ const (
 )
 
 // purchaseResponse is the GET /api/purchase/{token} response shape.
-// Interval is new (SPEC §3.2): a pending long-poll body may refresh the
+// Interval: a pending long-poll body may refresh the
 // client's cadence mid-wait.
 type purchaseResponse struct {
 	Status     string `json:"status"`
@@ -167,7 +167,7 @@ type HTTPError struct {
 	Message    string
 
 	// RetryAfter is parsed from a Retry-After response header, when present
-	// (seconds form only — SPEC §3.4's slow_down). Zero when absent or
+	// (seconds form only — the 429 slow_down). Zero when absent or
 	// unparseable.
 	RetryAfter time.Duration
 }
@@ -207,7 +207,7 @@ func (e *HTTPError) Advice() string {
 	}
 }
 
-// Client talks to a sharewared server (SPEC §3).
+// Client talks to a sharewared server.
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
@@ -272,7 +272,7 @@ func (c *Client) GetCatalog(ctx context.Context) ([]App, error) {
 
 // Buy starts a purchase for req.App (req.Email optional). When req is built
 // from a callback listener (req.CallbackPort != 0), the request also
-// carries a loopback callback nonce (SPEC §3.1, §5.3) — an old server
+// carries a loopback callback nonce — an old server
 // ignores both fields.
 //
 // The response is checked for internal consistency before it is returned:
@@ -356,7 +356,7 @@ func (c *Client) PollPurchase(ctx context.Context, token string) (status, licens
 }
 
 // WaitPurchase is PollPurchase with a server-side long-poll hold: it sends
-// ?wait=<seconds> (SPEC §3.2), so the server may park the request until the
+// ?wait=<seconds>, so the server may park the request until the
 // purchase completes or wait elapses, whichever comes first. interval is
 // the server's refreshed cadence hint, if it sent one (0 otherwise). Uses
 // the dedicated long-poll client so the default 15s HTTP.Timeout can't cut

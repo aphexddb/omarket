@@ -21,8 +21,8 @@ func stubOpenBrowser(t *testing.T) {
 }
 
 // TestRunSellPayoutsFireAndExit checks `sell payouts` never polls
-// sellers/me: it prints the onboarding URL and returns immediately (SPEC
-// §5.6). A poll here would be the old 5-minute-spinner behavior this
+// sellers/me: it prints the onboarding URL and returns immediately.
+// A poll here would be the old 5-minute-spinner behavior this
 // replaces.
 func TestRunSellPayoutsFireAndExit(t *testing.T) {
 	setConfigDir(t, t.TempDir())

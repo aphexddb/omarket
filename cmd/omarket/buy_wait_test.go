@@ -31,7 +31,7 @@ func shrinkBuyTimings(t *testing.T, liveBudget, phaseA, longPoll, fastWindow, fa
 // listener can't be created (simulated here via the newCallback injection
 // point), the /api/buy request body carries neither callback_port nor
 // callback_nonce — the server must see a request indistinguishable from
-// "no callback support" (SPEC §5.3 step 1).
+// "no callback support".
 func TestRunBuyBindFailureNoCallbackFields(t *testing.T) {
 	setConfigDir(t, t.TempDir())
 	shrinkBuyTimings(t, 2*time.Second, 20*time.Millisecond, 20*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond)
@@ -82,7 +82,7 @@ func TestRunBuyBindFailureNoCallbackFields(t *testing.T) {
 // reports "pending" a few times, we hit /done on its callback listener the
 // moment it's up (simulating the success page's redirect beating the
 // webhook), and expect the wake to trigger fast-polling rather than waiting
-// out a long cadence gap (SPEC §5.3 step 4, "on wake").
+// out a long cadence gap.
 func TestRunBuyWakeWhilePendingFastPolls(t *testing.T) {
 	setConfigDir(t, t.TempDir())
 	shrinkBuyTimings(t, 5*time.Second, 20*time.Millisecond, 50*time.Millisecond, 500*time.Millisecond, 10*time.Millisecond)
@@ -168,8 +168,8 @@ func httpDoneURL(cb *callbackListener) string {
 	return "http://127.0.0.1:" + strconv.Itoa(cb.port) + "/done?cb_nonce=" + cb.nonce
 }
 
-// TestRunBuyTimeoutThenReconcileLandsKey is the end-to-end guarantee test
-// (SPEC §5.4): a buy that never completes within the live budget must leave
+// TestRunBuyTimeoutThenReconcileLandsKey is the end-to-end guarantee test:
+// a buy that never completes within the live budget must leave
 // a pending record on disk, and a later reconcile (as `omarket licenses`
 // runs on every launch) must land the verified license once the same
 // server reports it complete.

@@ -11,8 +11,8 @@ import (
 )
 
 // Cadence bounds for the decay schedule used against a server that doesn't
-// send an interval (an old server, or before the first response arrives) —
-// SPEC §5.2. decayFloor is also the safety net that makes an ignored
+// send an interval (an old server, or before the first response arrives).
+// decayFloor is also the safety net that makes an ignored
 // ?wait= harmless: no matter what, requests never come faster than this.
 const (
 	decayFloor      = 2 * time.Second
@@ -51,7 +51,7 @@ func jitter(d time.Duration) time.Duration {
 }
 
 // cadence tracks the polling gap for one buy/status wait: server-tunable
-// when the server sends an interval (SPEC §3.1/§3.2), decaying with jitter
+// when the server sends an interval, decaying with jitter
 // otherwise. Zero value is ready to use.
 type cadence struct {
 	serverInterval time.Duration // >0 once the server has told us; sticky
@@ -68,7 +68,7 @@ func (cd *cadence) observe(serverInterval time.Duration) {
 }
 
 // current returns the cadence's most recent interval without advancing the
-// decay schedule — used for 429 handling (SPEC §3.4's max(Retry-After,
+// decay schedule — used for 429 handling (max(Retry-After,
 // interval)), where advancing would double-count the backoff.
 func (cd *cadence) current() time.Duration {
 	if cd.serverInterval > 0 {
@@ -94,7 +94,7 @@ func (cd *cadence) next() time.Duration {
 // maxConsecutiveTransportErrors bounds how many times in a row a status
 // wait re-issues after a transport-level failure before giving up. One
 // in-flight request dying is routine — the machine slept, the server
-// redeployed mid-hold, a dial hiccuped (SPEC §11) — and the loop simply
+// redeployed mid-hold, a dial hiccuped — and the loop simply
 // re-issues; a server that fails this many times in a row is genuinely
 // unreachable and worth reporting instead of silently spinning.
 const maxConsecutiveTransportErrors = 5
@@ -102,13 +102,13 @@ const maxConsecutiveTransportErrors = 5
 // pollRetrying calls poll, retrying the two failures a status wait must
 // survive:
 //
-//   - 429 slow_down (SPEC §3.4): sleep max(Retry-After, cadence's current
+//   - 429 slow_down: sleep max(Retry-After, cadence's current
 //     interval) and retry — 429 is never terminal for a status wait.
 //   - Transport-level errors (no HTTP response at all): sleep the cadence's
 //     current interval and retry, up to maxConsecutiveTransportErrors in a
-//     row — an in-flight request dying mid-wait is an expected failure mode
-//     (SPEC §11), not a reason to abandon a purchase the server may be
-//     about to complete.
+//     row — an in-flight request dying mid-wait is an expected failure
+//     mode, not a reason to abandon a purchase the server may be about to
+//     complete.
 //
 // Any other HTTP error status, a cancelled ctx, or a non-429 success
 // returns immediately.

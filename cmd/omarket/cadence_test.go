@@ -13,7 +13,7 @@ import (
 	"github.com/aphexddb/omarket/client"
 )
 
-// TestNextDecayIntervalSequence pins the exact decay schedule (SPEC §5.2):
+// TestNextDecayIntervalSequence pins the exact decay schedule:
 // 2s, 3s, 4.5s, 6.75s, 10.125s, capped at 15s from then on.
 func TestNextDecayIntervalSequence(t *testing.T) {
 	want := []time.Duration{
@@ -66,7 +66,7 @@ func TestJitterBounds(t *testing.T) {
 }
 
 // TestCadenceServerIntervalSticky checks a server-sent interval overrides
-// decay entirely and stays in effect (SPEC §5.2).
+// decay entirely and stays in effect.
 func TestCadenceServerIntervalSticky(t *testing.T) {
 	cd := &cadence{}
 	cd.observe(5 * time.Second)
@@ -107,7 +107,7 @@ func TestCadenceDecayWithoutServerInterval(t *testing.T) {
 
 // TestPollRetrying429ThenCompletes scripts {429, 429, pending, complete}: a
 // status wait must survive repeated slow_down responses and still complete,
-// honoring RetryAfter each time rather than giving up (SPEC §3.4).
+// honoring RetryAfter each time rather than giving up.
 func TestPollRetrying429ThenCompletes(t *testing.T) {
 	var calls int
 	mux := http.NewServeMux()
@@ -197,7 +197,7 @@ func TestPollRetrying429UsesRetryAfterFloor(t *testing.T) {
 
 // TestPollRetryingTransientTransportErrors checks a wait survives requests
 // that die without an HTTP response — the machine slept, the server
-// redeployed mid-hold, a dial hiccuped (SPEC §11) — by re-issuing rather
+// redeployed mid-hold, a dial hiccuped — by re-issuing rather
 // than aborting the whole wait.
 func TestPollRetryingTransientTransportErrors(t *testing.T) {
 	cd := &cadence{}

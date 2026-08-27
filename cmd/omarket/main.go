@@ -1,6 +1,6 @@
 // Command omarket is the user-facing shareware market client: browse the
 // catalog, install apps, buy licenses, and manage them, either via a
-// full-screen TUI (bare `omarket`) or plain subcommands (SPEC §3).
+// full-screen TUI (bare `omarket`) or plain subcommands.
 package main
 
 import (

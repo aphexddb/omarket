@@ -13,7 +13,7 @@ import (
 )
 
 // catalogCacheFresh is how long a cached catalog is trusted with zero
-// network requests (SPEC §5.5/§3.6).
+// network requests.
 const catalogCacheFresh = 5 * time.Minute
 
 // catalogCacheEntry is the on-disk shape of one cache file: the last
@@ -116,7 +116,7 @@ func (c *Client) fetchCatalogRaw(ctx context.Context, etag string) (body []byte,
 }
 
 // GetCatalogCached is GetCatalog backed by a disk cache keyed on the
-// client's server URL (SPEC §5.5):
+// client's server URL:
 //
 //   - a cache written within the last catalogCacheFresh -> returned as-is,
 //     zero requests.

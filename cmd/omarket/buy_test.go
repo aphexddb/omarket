@@ -64,7 +64,7 @@ func TestRunListIsHiddenAliasForCatalog(t *testing.T) {
 // TestRunBuyWithArgPurchasesApp covers the "buy-with-arg -> purchase path"
 // case: `omarket buy <app>` must run the checkout/poll/save flow, not print
 // the catalog, and must land a verified license on disk (the buy path's
-// verify-then-save, SPEC §5.3 step 5).
+// verify-then-save).
 func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 	setConfigDir(t, t.TempDir())
 	newCallback = func() *callbackListener { return nil } // no loopback in this test

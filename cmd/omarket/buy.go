@@ -17,7 +17,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 )
 
-// Timing knobs for the layered wait (SPEC §2, §5.2, §5.3). Vars, not
+// Timing knobs for the layered wait. Vars, not
 // consts, so tests can shrink them instead of running for real minutes.
 var (
 	buyLiveBudget       = 10 * time.Minute // wall-clock cap on the whole wait, independent of expires_in
@@ -28,7 +28,7 @@ var (
 )
 
 // defaultPendingTTL is used when the server doesn't send expires_in (an old
-// server): matches Stripe Checkout's default session lifetime (SPEC §3.1).
+// server): matches Stripe Checkout's default session lifetime.
 const defaultPendingTTL = 24 * time.Hour
 
 var spinnerFrames = []rune{'|', '/', '-', '\\'}
@@ -155,7 +155,7 @@ func printStillPending() {
 
 // persistPending saves the pending-purchase record immediately after Buy
 // returns a token, before anything else is printed — so a Ctrl-C at the QR
-// screen already loses nothing (SPEC §5.3 step 2).
+// screen already loses nothing.
 func persistPending(res client.BuyResult, appID, serverURL string) error {
 	ttl := res.ExpiresIn
 	if ttl <= 0 {
@@ -226,8 +226,8 @@ func buyStartError(appID string, err error) error {
 }
 
 // waitForPurchase drives the layered wait until the purchase completes, the
-// live budget (buyLiveBudget) elapses, or ctx is cancelled (SPEC §5.3 step
-// 4). Returns status=="complete" with a key on success; status=="pending"
+// live budget (buyLiveBudget) elapses, or ctx is cancelled.
+// Returns status=="complete" with a key on success; status=="pending"
 // with a nil error on a budget timeout (not a failure); a non-nil error on
 // cancellation or a hard request failure.
 func waitForPurchase(ctx context.Context, c *client.Client, token string, cd *cadence, cb *callbackListener) (status, key string, err error) {
@@ -303,8 +303,7 @@ func waitForPurchase(ctx context.Context, c *client.Client, token string, cd *ca
 
 // wokenFastPoll runs the authoritative re-check triggered by a loopback
 // wake, then — if the redirect outran the webhook — 1s-interval fast polls
-// for buyFastPollWindow before handing back to the caller's normal cadence
-// (SPEC §5.3 step 4, "on wake").
+// for buyFastPollWindow before handing back to the caller's normal cadence.
 func wokenFastPoll(ctx context.Context, pollNow func() (string, string, error), deadline time.Time, spin func()) (string, string, error) {
 	spin()
 	status, key, err := pollNow()

@@ -13,7 +13,7 @@ import (
 
 // callbackDoneHTML is the tiny static page served on a valid /done hit. It
 // never mentions the license key: the callback is a wake-up hint only, not
-// a delivery channel (SPEC §3.5, §7.2).
+// a delivery channel.
 const callbackDoneHTML = `<!doctype html>
 <html><head><meta charset="utf-8"><title>omarket</title></head>
 <body style="font-family: sans-serif; text-align: center; margin-top: 3em;">
@@ -23,7 +23,7 @@ const callbackDoneHTML = `<!doctype html>
 
 // callbackListener is the loopback callback server (RFC 8252 §7.3 style)
 // the success page redirects to after checkout, waking the buy command
-// early instead of it waiting out its next poll interval (SPEC §3.5, §5.3).
+// early instead of it waiting out its next poll interval.
 // It is a hint, never an authority: a valid hit only closes wake, which the
 // caller treats as a cue to re-check with the server, never as proof of
 // completion on its own.
@@ -75,7 +75,7 @@ func newCallbackListener() *callbackListener {
 }
 
 // randomNonce returns a 128-bit crypto/rand nonce, base64url-encoded
-// without padding (SPEC §7.3).
+// without padding.
 func randomNonce() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
