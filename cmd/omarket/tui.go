@@ -529,6 +529,57 @@ func truncCell(s string, w int) string {
 	return strings.TrimRight(string(r), " ") + "…"
 }
 
+// wrapWords breaks s on spaces into lines of at most w display cells.
+// A single word longer than w is left intact; the caller truncates.
+func wrapWords(s string, w int) []string {
+	if w < 1 {
+		return nil
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return nil
+	}
+	var lines []string
+	cur := words[0]
+	for _, word := range words[1:] {
+		next := cur + " " + word
+		if lipgloss.Width(next) <= w {
+			cur = next
+			continue
+		}
+		lines = append(lines, cur)
+		cur = word
+	}
+	return append(lines, cur)
+}
+
+type colorKey struct {
+	lit   string
+	style lipgloss.Style
+}
+
+// colorKeys paints each key in s with its style; everything else uses rest.
+func colorKeys(s string, rest lipgloss.Style, keys []colorKey) string {
+	if s == "" {
+		return ""
+	}
+	earliest, which := -1, -1
+	for i, k := range keys {
+		if k.lit == "" {
+			continue
+		}
+		j := strings.Index(s, k.lit)
+		if j >= 0 && (earliest < 0 || j < earliest) {
+			earliest, which = j, i
+		}
+	}
+	if which < 0 {
+		return rest.Render(s)
+	}
+	k := keys[which]
+	return rest.Render(s[:earliest]) + k.style.Render(k.lit) + colorKeys(s[earliest+len(k.lit):], rest, keys)
+}
+
 // splitLine lays left and right on one line of width w, right-aligned right.
 // Both are plain text; the caller styles the result's halves beforehand only
 // if their width is unaffected (no padding assumptions broken).
@@ -590,6 +641,56 @@ func (m model) columns(w int) listCols {
 	return c
 }
 
+// renderEmptyCatalog is the list body when a successful fetch returned no
+// apps. Headline and commands are highlighted so the empty catalog reads
+// as an invitation to publish, not a void.
+func renderEmptyCatalog(w, maxLines int) string {
+	if maxLines < 1 {
+		maxLines = 1
+	}
+	var b strings.Builder
+	n := 0
+	for _, line := range emptyCatalogLines(w) {
+		if n >= maxLines {
+			break
+		}
+		b.WriteString(ansi.Truncate(line, w, "…"))
+		b.WriteByte('\n')
+		n++
+	}
+	return b.String()
+}
+
+func emptyCatalogLines(w int) []string {
+	const indent = "  "
+	inner := max(1, w-lipgloss.Width(indent))
+
+	lines := []string{
+		titleStyle.Render(indent + "no apps yet"),
+		"",
+	}
+	body := "Be the first. Publish shareware with omarket sell."
+	keys := []colorKey{
+		{"omarket sell", checkoutStyle},
+	}
+	for _, line := range wrapWords(body, inner) {
+		lines = append(lines, colorKeys(indent+line, mutedStyle, keys))
+	}
+	lines = append(lines, "")
+	for _, cmd := range []string{
+		"omarket sell init",
+		"omarket sell claim my-app",
+		"omarket sell push",
+	} {
+		lines = append(lines, indent+"  "+checkoutStyle.Render(cmd))
+	}
+	lines = append(lines,
+		"",
+		indent+successStyle.Render("examples/")+mutedStyle.Render(" · C, Go, Rust, Ruby"),
+	)
+	return lines
+}
+
 func (m model) renderList() string {
 	w := m.contentWidth()
 	cols := m.columns(w)
@@ -628,13 +729,19 @@ func (m model) renderList() string {
 	}
 
 	// Column headers belong to a table. An empty, loading, or failed
-	// catalog is a status, not a zero-row table — "catalog empty" under
+	// catalog is a status, not a zero-row table — "no apps yet" under
 	// NAME looks like an app named that.
 	showTable := len(m.apps) > 0
 	if showTable {
 		header := padCell("NAME", cols.name+2) + gap + padCell("WARE", cols.ware) +
 			gap + padLeft("PRICE", cols.price) + gap + "DESCRIPTION"
 		b.WriteString("  " + mutedStyle.Render(truncCell(header, w-2)) + "\n")
+	}
+
+	visible := m.visibleRows()
+	if !showTable {
+		// Header line was skipped; keep the view the same height.
+		visible++
 	}
 
 	linesUsed := 0
@@ -645,17 +752,12 @@ func (m model) renderList() string {
 		b.WriteString(mutedStyle.Render("  loading catalog...") + "\n")
 		linesUsed++
 	} else if len(m.apps) == 0 {
-		b.WriteString(mutedStyle.Render("  catalog empty") + "\n")
-		linesUsed++
+		body := renderEmptyCatalog(w, visible)
+		b.WriteString(body)
+		linesUsed += strings.Count(body, "\n")
 	} else if len(m.filtered) == 0 {
 		b.WriteString(mutedStyle.Render("  no apps match") + "\n")
 		linesUsed++
-	}
-
-	visible := m.visibleRows()
-	if !showTable {
-		// Header line was skipped; keep the view the same height.
-		visible++
 	}
 	end := m.offset + visible
 	if end > len(m.filtered) {

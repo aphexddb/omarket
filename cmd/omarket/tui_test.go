@@ -429,7 +429,7 @@ func TestCatalogEmptyShowsEmptyState(t *testing.T) {
 	if !strings.Contains(plain, "loading catalog...") {
 		t.Fatalf("unloaded view should say loading:\n%s", plain)
 	}
-	if strings.Contains(plain, "catalog empty") {
+	if strings.Contains(plain, "no apps yet") {
 		t.Fatalf("unloaded view should not say empty:\n%s", plain)
 	}
 	if strings.Contains(plain, "DESCRIPTION") {
@@ -448,11 +448,18 @@ func TestCatalogEmptyShowsEmptyState(t *testing.T) {
 	if strings.Contains(plain, "loading catalog...") {
 		t.Fatalf("empty catalog still looks like loading:\n%s", plain)
 	}
-	if !strings.Contains(plain, "catalog empty") {
-		t.Fatalf("empty catalog missing empty state:\n%s", plain)
-	}
-	if !strings.Contains(plain, "0 apps") {
-		t.Fatalf("empty catalog missing 0 apps count:\n%s", plain)
+	for _, want := range []string{
+		"no apps yet",
+		"omarket sell init",
+		"omarket sell claim my-app",
+		"omarket sell push",
+		"examples/",
+		"C, Go, Rust, Ruby",
+		"0 apps",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("empty catalog missing %q:\n%s", want, plain)
+		}
 	}
 	for _, header := range []string{"NAME", "WARE", "PRICE", "DESCRIPTION"} {
 		if strings.Contains(plain, header) {
@@ -467,8 +474,57 @@ func TestCatalogEmptyShowsEmptyState(t *testing.T) {
 	updated, _ = m.Update(catalogMsg{apps: nil})
 	got = mustModel(t, updated)
 	plain = ansi.Strip(got.View())
-	if strings.Contains(plain, "loading catalog...") || !strings.Contains(plain, "catalog empty") {
+	if strings.Contains(plain, "loading catalog...") || !strings.Contains(plain, "no apps yet") {
 		t.Fatalf("nil apps after a successful fetch should look empty:\n%s", plain)
+	}
+}
+
+func TestEmptyCatalogFitsWidth(t *testing.T) {
+	for _, w := range []int{40, 60, 80, 120} {
+		for _, h := range []int{10, 24} {
+			m := newModel("https://omarket.dev")
+			m.width, m.height = w, h
+			updated, _ := m.Update(catalogMsg{apps: []client.App{}})
+			got := mustModel(t, updated)
+			view := got.View()
+			for i, line := range strings.Split(view, "\n") {
+				if n := lipgloss.Width(line); n > w {
+					t.Errorf("%dx%d: line %d is %d cells: %q", w, h, i, n, ansi.Strip(line))
+				}
+			}
+			if n := strings.Count(view, "\n") + 1; n != h {
+				t.Errorf("%dx%d: view is %d lines, want %d", w, h, n, h)
+			}
+		}
+	}
+}
+
+func TestWrapWords(t *testing.T) {
+	got := wrapWords("Be the first. Publish shareware with omarket sell.", 20)
+	if len(got) < 2 {
+		t.Fatalf("expected a wrap, got %q", got)
+	}
+	for _, line := range got {
+		if lipgloss.Width(line) > 20 {
+			t.Errorf("line %q wider than 20", line)
+		}
+	}
+	if join := strings.Join(got, " "); !strings.Contains(join, "omarket sell") {
+		t.Fatalf("wrap dropped words: %q", got)
+	}
+}
+
+func TestColorKeysPreservesWidth(t *testing.T) {
+	plain := "  with omarket sell, then copy a license check from examples/."
+	got := colorKeys(plain, mutedStyle, []colorKey{
+		{"omarket sell", checkoutStyle},
+		{"examples/", successStyle},
+	})
+	if lipgloss.Width(got) != lipgloss.Width(plain) {
+		t.Fatalf("styled width %d, plain width %d", lipgloss.Width(got), lipgloss.Width(plain))
+	}
+	if !strings.Contains(ansi.Strip(got), "omarket sell") || !strings.Contains(ansi.Strip(got), "examples/") {
+		t.Fatalf("colorKeys dropped a keyword:\n%s", ansi.Strip(got))
 	}
 }
 
