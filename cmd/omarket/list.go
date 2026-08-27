@@ -22,9 +22,12 @@ func priceString(a client.App) string {
 // list` alias.
 func printCatalog(server string) error {
 	c := client.NewClient(client.ResolveServer(server))
-	apps, err := c.GetCatalog(context.Background())
+	apps, stale, err := c.GetCatalogCached(context.Background())
 	if err != nil {
 		return fmt.Errorf("fetching catalog: %w", err)
+	}
+	if stale {
+		fmt.Println(mutedStyle.Render("(cached; showing the last catalog fetched while offline)"))
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
@@ -72,9 +75,12 @@ func runInfo(args []string) error {
 	appID := fs.Arg(0)
 
 	c := client.NewClient(client.ResolveServer(*server))
-	apps, err := c.GetCatalog(context.Background())
+	apps, stale, err := c.GetCatalogCached(context.Background())
 	if err != nil {
 		return fmt.Errorf("fetching catalog: %w", err)
+	}
+	if stale {
+		fmt.Println(mutedStyle.Render("(cached; showing the last catalog fetched while offline)"))
 	}
 
 	a, ok := findApp(apps, appID)

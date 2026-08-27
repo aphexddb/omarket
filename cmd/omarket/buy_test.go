@@ -7,12 +7,15 @@ import (
 	"testing"
 
 	"github.com/aphexddb/omarket/client"
+	"github.com/aphexddb/omarket/license"
 )
 
 // TestRunBuyNoArgBrowsesCatalog covers the "buy-no-arg -> list path" case:
 // `omarket buy` with no app id must hit the catalog endpoint, the same one
 // `omarket list` uses, rather than the purchase endpoints.
 func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
+	setConfigDir(t, t.TempDir())
+
 	var hitCatalog bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -41,6 +44,8 @@ func TestRunBuyNoArgBrowsesCatalog(t *testing.T) {
 // TestRunListIsHiddenAliasForCatalog checks the hidden `omarket list` alias
 // still works and hits the same endpoint as `omarket buy` with no args.
 func TestRunListIsHiddenAliasForCatalog(t *testing.T) {
+	setConfigDir(t, t.TempDir())
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/catalog.json" {
 			http.NotFound(w, r)
@@ -57,9 +62,23 @@ func TestRunListIsHiddenAliasForCatalog(t *testing.T) {
 
 // TestRunBuyWithArgPurchasesApp covers the "buy-with-arg -> purchase path"
 // case: `omarket buy <app>` must run the checkout/poll/save flow, not print
-// the catalog.
+// the catalog, and must land a verified license on disk (the buy path's
+// verify-then-save, SPEC §5.3 step 5).
 func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 	setConfigDir(t, t.TempDir())
+	newCallback = func() *callbackListener { return nil } // no loopback in this test
+	t.Cleanup(func() { newCallback = newCallbackListener })
+
+	pub, priv, err := license.GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair: %v", err)
+	}
+	t.Setenv("SHAREWARE_PUBLIC_KEY", license.EncodePublicKey(pub))
+	l := license.NewLicense("hello-shareware", "", "personal")
+	key, err := license.Sign(l, priv)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
 
 	var hitBuy, hitPurchase bool
 	mux := http.NewServeMux()
@@ -74,7 +93,7 @@ func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 		hitPurchase = true
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"status":      "complete",
-			"license_key": "SHRW1.payload.sig",
+			"license_key": key,
 		})
 	})
 	mux.HandleFunc("/api/catalog.json", func(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +110,14 @@ func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 	}
 	if !client.HasLicense("hello-shareware") {
 		t.Fatal("expected the purchased license to be saved to disk")
+	}
+
+	pending, err := client.ListPending()
+	if err != nil {
+		t.Fatalf("ListPending: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("expected the pending record to be deleted on completion, got %+v", pending)
 	}
 }
 

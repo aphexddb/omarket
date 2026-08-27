@@ -37,7 +37,7 @@ func runTUI() error {
 
 	switch fm.action.kind {
 	case "buy":
-		return runCheckout(fm.server, fm.action.app, fm.action.checkoutURL, fm.action.token)
+		return runCheckout(fm.server, fm.action.app, fm.action.res)
 	}
 	return nil
 }
@@ -50,22 +50,21 @@ const (
 )
 
 type tuiAction struct {
-	kind        string // "buy" leaves the TUI for QR checkout
-	app         string
-	checkoutURL string
-	token       string
+	kind string // "buy" leaves the TUI for QR checkout
+	app  string
+	res  client.BuyResult
 }
 
 type catalogMsg struct {
-	apps []client.App
-	err  error
+	apps  []client.App
+	stale bool
+	err   error
 }
 
 type buyResultMsg struct {
-	app         string
-	checkoutURL string
-	token       string
-	err         error
+	app string
+	res client.BuyResult
+	err error
 }
 
 type installResultMsg struct {
@@ -83,18 +82,33 @@ var tuiInstallVia = client.InstallVia
 
 func fetchCatalogCmd(c *client.Client) tea.Cmd {
 	return func() tea.Msg {
-		apps, err := c.GetCatalog(context.Background())
-		return catalogMsg{apps: apps, err: err}
+		apps, stale, err := c.GetCatalogCached(context.Background())
+		return catalogMsg{apps: apps, stale: stale, err: err}
+	}
+}
+
+// reconcileCmd resolves any pending purchase records in the background
+// (SPEC §5.4) — the same hook `runLicenses` runs at startup, minus the
+// printed notices: the TUI's alt-screen has nowhere sane to put them
+// mid-render. A resolved purchase's license still lands on disk either way;
+// the catalog view picks up the new "owned" mark next launch. Errors are
+// swallowed for the same reason runLicenses swallows them: best-effort.
+func reconcileCmd() tea.Cmd {
+	return func() tea.Msg {
+		if pub, err := resolvePublicKey(); err == nil {
+			_, _ = client.Reconcile(context.Background(), pub)
+		}
+		return nil
 	}
 }
 
 func startBuyCmd(server, appID string) tea.Cmd {
 	return func() tea.Msg {
-		checkoutURL, token, err := client.NewClient(server).Buy(context.Background(), appID, "")
+		res, err := client.NewClient(server).Buy(context.Background(), client.BuyRequest{App: appID})
 		if err != nil {
 			return buyResultMsg{app: appID, err: buyStartError(appID, err)}
 		}
-		return buyResultMsg{app: appID, checkoutURL: checkoutURL, token: token}
+		return buyResultMsg{app: appID, res: res}
 	}
 }
 
@@ -143,6 +157,7 @@ type model struct {
 	installPkg string
 
 	action *tuiAction
+	stale  bool // catalog served from the offline disk cache (SPEC §5.5)
 
 	width, height int
 }
@@ -152,7 +167,7 @@ func newModel(server string) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return fetchCatalogCmd(client.NewClient(m.server))
+	return tea.Batch(fetchCatalogCmd(client.NewClient(m.server)), reconcileCmd())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -169,6 +184,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loadErr = nil
 		m.apps = msg.apps
+		m.stale = msg.stale
 		m.applyFilter()
 		return m, nil
 
@@ -180,10 +196,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.action = &tuiAction{
-			kind:        "buy",
-			app:         msg.app,
-			checkoutURL: msg.checkoutURL,
-			token:       msg.token,
+			kind: "buy",
+			app:  msg.app,
+			res:  msg.res,
 		}
 		return m, tea.Quit
 
@@ -578,6 +593,9 @@ func (m model) renderList() string {
 	right := fmt.Sprintf("%d/%d apps · %s", len(m.filtered), len(m.apps), serverHost(m.server))
 	if len(m.apps) == 0 {
 		right = serverHost(m.server)
+	}
+	if m.stale {
+		right += " (cached)"
 	}
 	b.WriteString(splitLine(titleStyle.Render("omarket"), mutedStyle.Render(right), w))
 	b.WriteString("\n")

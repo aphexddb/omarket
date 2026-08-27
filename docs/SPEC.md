@@ -97,6 +97,18 @@ request the old path and follow the redirect; from v0.2 the client requests
 Not to be confused with `GET /api/catalog` (§4), a different endpoint in a
 different shape.
 
+`GET /api/catalog.json` also answers `ETag: "<hex sha256 of the body>"` and
+`Cache-Control: public, max-age=300`. A client that sends
+`If-None-Match: <etag>` (quoted or bare) gets `304 Not Modified` with an
+empty body when the catalog hasn't changed since; otherwise a normal `200`
+with a fresh `ETag`. The `omarket` client keeps a disk cache
+(`~/.config/shareware/cache/`) keyed by server URL: a cache under 5 minutes
+old is used with no request at all, an older one is revalidated with
+`If-None-Match`, and a network error serves the stale cache with a note
+rather than failing outright. A server or client that predates this is
+unaffected — `If-None-Match` absent means an unconditional `200`, exactly as
+before.
+
 ```json
 {
   "id": "hello-shareware",
@@ -153,8 +165,9 @@ Five top-level commands: `buy`, `sell`, `licenses`, `verify`, `version`.
 omarket                      # TUI: browse catalog, enter=detail, b=buy, i=install, q=quit
 omarket buy                  # plain table of the catalog (no app id given)
 omarket buy <app> [-email x] # POST /api/buy, print checkout URL + QR (qrterminal),
-                             # poll /api/purchase/{token} every 2s (10 min timeout),
-                             # save the key to licenses/<app>.key, print the path
+                             # wait for the purchase to complete (layered wait,
+                             # below; 10 min live budget), save the key to
+                             # licenses/<app>.key, print the path
 omarket licenses             # list stored keys with verified status
 omarket verify <key|path|-> [-server <url>]
                              # verify a SHRW1 key: the arg is the key itself,
@@ -165,6 +178,54 @@ omarket verify <key|path|-> [-server <url>]
                              # verifies against its key(s).
 omarket version              # print the version
 ```
+
+### Waiting for a purchase
+
+`omarket buy` no longer polls a fixed endpoint on a fixed clock. It layers
+three mechanisms, strictly decreasing in optimism — each upper one is purely
+an optimization; only the bottom one is a correctness guarantee:
+
+1. **Loopback callback.** `POST /api/buy` may include `callback_port`
+   (1024–65535) and `callback_nonce` (8–64 chars of `[A-Za-z0-9_-]`; required
+   together). When present, the server builds the Stripe `success_url` as
+   `{baseURL}/success?purchase={token}&cb_port={port}&cb_nonce={nonce}`
+   instead of its plain form — never accepting a URL/host/path from the
+   client, only the validated port and nonce. The success page then
+   top-level-navigates to `http://127.0.0.1:{port}/done?cb_nonce={nonce}`.
+   The CLI's listener answers only `GET /done`, compares the nonce in
+   constant time, and on a match closes a tiny wake-up page and treats that
+   as a *hint* to check now — it never carries the license key, and a wrong
+   or missing nonce just gets a bodyless 404 with the listener left running.
+   Unavailable over SSH, headless CI, or when the port can't bind; failing
+   to bind is silent and simply omits both fields from the request.
+2. **Long-poll.** `GET /api/purchase/{token}?wait=N` (`N` seconds, server-
+   clamped to `[0, 25]`) parks the request until the purchase completes or
+   `N` seconds pass, whichever is first, answering
+   `{"status":"pending","interval":N}` on timeout (`interval` optional, a
+   mid-wait cadence refresh) or the usual complete body the moment it's
+   ready. An old server ignores `?wait=` and answers instantly — safe
+   because of the client-side floor below.
+3. **Durable pending record + reconcile.** The moment `POST /api/buy`
+   returns a token — before the checkout URL is even printed — the CLI
+   writes `~/.config/shareware/pending/<token>.json`
+   (`{"token","app","server","created_at","expires_at"}`, 0600). If the live
+   wait ends without completing (timeout, Ctrl-C, crash, sleep), the record
+   stays. `omarket licenses` and the TUI reconcile pending records on every
+   launch: one `GET /api/purchase/{token}` per record (oldest first, up to
+   5 per run) against its own recorded server — complete lands the license,
+   an unknown token (404) or an expired record (past `expires_at` plus a 1h
+   clock-skew grace) drops it with a one-line notice, anything else is left
+   for next time.
+
+Cadence between requests is server-authoritative: `POST /api/buy` returns
+`interval` (seconds between polls/long-poll re-issues) and `expires_in`
+(seconds the token is worth reconciling, governing the pending record's
+`expires_at` — independent of the 10-minute live-wait budget). Without a
+server-sent `interval` (an old server), the client decays its own poll gap:
+2s, ×1.5 per empty response, capped at 15s, ±20% jitter, never below the 2s
+floor — this floor is what makes an ignored `?wait=` harmless. A `429` with
+`Retry-After` (`{"error":"slow_down"}`) is not terminal: the client sleeps
+`max(Retry-After, interval)` and keeps waiting.
 
 `omarket list`, `omarket info <app>`, and `omarket install <app>` still work
 but are no longer advertised in `omarket -h`: `list` is `buy` with no
@@ -194,10 +255,27 @@ POST /api/sellers                          (no auth, empty JSON body)
                                             -> 201 {"seller_id","seller_token","onboarding_url"}
                                             (onboarding_url is always "" — this
                                             endpoint never touches Stripe)
-GET  /api/sellers/me                       (Authorization: Bearer <seller_token>)
+GET  /api/sellers/me[?wait=N]               (Authorization: Bearer <seller_token>)
                                             -> 200 {"seller_id","charges_enabled","onboarding_url","apps":[AppPublic...]}
                                             (onboarding_url is "" until the
-                                            seller has started payouts setup)
+                                            seller has started payouts setup;
+                                            `charges_enabled` is served from a
+                                            server-side cache kept current by
+                                            a Stripe webhook, not a live
+                                            Stripe call on every request —
+                                            see below. `?wait=N` (seconds,
+                                            same [0,25] clamp as purchase
+                                            long-poll) parks the request for
+                                            a status change; a `?wait=`
+                                            response never mints a fresh
+                                            `onboarding_url` — it comes back
+                                            "" even mid-onboarding, since
+                                            minting one is a Stripe call this
+                                            path exists to avoid. A plain
+                                            (no `?wait=`) request still mints
+                                            one as before. Same 429
+                                            `slow_down`/`Retry-After` as
+                                            purchase polling can apply here.)
 POST /api/sellers/payouts                  (Bearer, empty JSON body)
                                             -> 200 {"stripe_account","onboarding_url"};
                                             if a Stripe account already exists,
@@ -269,10 +347,16 @@ omarket sell push            # reads ./omarket.json; PUT /api/apps/{id}.
 omarket sell testkey [app]   # POST /api/apps/{id}/test-license; verifies the
                              # key locally, then saves it
 omarket sell payouts         # POST /api/sellers/payouts; opens the returned
-                             # onboarding_url in the browser and polls
-                             # /api/sellers/me until charges_enabled (~5 min
-                             # timeout — not an error; prints how to re-check
-                             # later). If already enabled, says so and exits.
-                             # 503 means the server has no Stripe configured.
-omarket sell status          # GET /api/sellers/me
+                             # onboarding_url in the browser and exits —
+                             # fire-and-exit, no polling. Onboarding is a
+                             # human filling in bank forms, sometimes over
+                             # days, so the CLI doesn't wait for it; re-check
+                             # with `omarket sell status` whenever. If
+                             # already enabled, says so and exits. 503 means
+                             # the server has no Stripe configured.
+omarket sell status [-wait]  # GET /api/sellers/me. -wait long-polls
+                             # (?wait=25 per request) for up to 2 minutes or
+                             # until charges_enabled flips, then prints
+                             # status either way — useful right after
+                             # finishing the browser onboarding flow.
 ```

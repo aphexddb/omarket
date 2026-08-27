@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"flag"
 	"fmt"
@@ -14,6 +15,10 @@ func runLicenses(args []string) error {
 	fs := flag.NewFlagSet("licenses", flag.ExitOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if pub, perr := resolvePublicKey(); perr == nil {
+		reconcileAndReport(context.Background(), pub)
 	}
 
 	entries, err := client.ListLicenses()

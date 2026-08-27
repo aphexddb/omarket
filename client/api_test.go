@@ -3,9 +3,11 @@ package client_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/aphexddb/omarket/client"
 )
@@ -72,16 +74,17 @@ func TestBuyAndPollPurchaseToCompletion(t *testing.T) {
 	defer srv.Close()
 
 	c := client.NewClient(srv.URL)
-	checkoutURL, token, err := c.Buy(context.Background(), "hello-shareware", "buyer@example.com")
+	res, err := c.Buy(context.Background(), client.BuyRequest{App: "hello-shareware", Email: "buyer@example.com"})
 	if err != nil {
 		t.Fatalf("Buy: %v", err)
 	}
-	if checkoutURL != "https://checkout.stripe.com/session123" {
-		t.Fatalf("checkoutURL = %q", checkoutURL)
+	if res.CheckoutURL != "https://checkout.stripe.com/session123" {
+		t.Fatalf("checkoutURL = %q", res.CheckoutURL)
 	}
-	if token != "pt_abc123" {
-		t.Fatalf("token = %q", token)
+	if res.Purchase != "pt_abc123" {
+		t.Fatalf("token = %q", res.Purchase)
 	}
+	token := res.Purchase
 
 	var status, key string
 	for i := 0; i < 5; i++ {
@@ -170,6 +173,110 @@ func TestGetPublicKeysEmptyResponse(t *testing.T) {
 	c := client.NewClient(srv.URL)
 	if _, err := c.GetPublicKeys(context.Background()); err == nil {
 		t.Fatal("GetPublicKeys: expected error for response with no keys")
+	}
+}
+
+// TestWaitPurchaseUsesDedicatedClient is a regression test for G7: the
+// default *http.Client (15s Timeout, formerly the *only* client) would kill
+// a long-poll hold well before the server's 25s cap. WaitPurchase must
+// route through the dedicated long-poll client instead, so a hold longer
+// than a short, synthetic c.HTTP.Timeout still succeeds.
+func TestWaitPurchaseUsesDedicatedClient(t *testing.T) {
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/purchase/pt_hold", func(w http.ResponseWriter, r *http.Request) {
+		<-release // hold the response well past c.HTTP's short timeout below
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "complete", "license_key": "SHRW1.a.b"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	c.HTTP.Timeout = 30 * time.Millisecond // would abort a held request almost immediately
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		time.Sleep(150 * time.Millisecond)
+		close(release)
+	}()
+
+	status, key, _, err := c.WaitPurchase(context.Background(), "pt_hold", 5*time.Second)
+	<-done
+	if err != nil {
+		t.Fatalf("WaitPurchase: %v (the dedicated long-poll client should not inherit HTTP's short timeout)", err)
+	}
+	if status != "complete" || key != "SHRW1.a.b" {
+		t.Fatalf("status=%q key=%q, want complete/SHRW1.a.b", status, key)
+	}
+}
+
+// TestWaitPurchaseInterval checks a pending long-poll body's optional
+// interval field is surfaced to the caller (SPEC §3.2's mid-wait cadence
+// refresh).
+func TestWaitPurchaseInterval(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "pending", "interval": 7})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	status, _, interval, err := c.WaitPurchase(context.Background(), "pt_x", time.Second)
+	if err != nil {
+		t.Fatalf("WaitPurchase: %v", err)
+	}
+	if status != "pending" {
+		t.Fatalf("status = %q, want pending", status)
+	}
+	if interval != 7*time.Second {
+		t.Fatalf("interval = %v, want 7s", interval)
+	}
+}
+
+// TestHTTPErrorRetryAfterParsed checks the Retry-After response header
+// (seconds form) lands on HTTPError.RetryAfter (SPEC §3.4).
+func TestHTTPErrorRetryAfterParsed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "3")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "slow_down"})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	_, _, err := c.PollPurchase(context.Background(), "pt_limited")
+	if err == nil {
+		t.Fatal("expected an error for a 429 response")
+	}
+	var herr *client.HTTPError
+	if !errors.As(err, &herr) {
+		t.Fatalf("expected *client.HTTPError, got %T: %v", err, err)
+	}
+	if herr.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("StatusCode = %d, want 429", herr.StatusCode)
+	}
+	if herr.RetryAfter != 3*time.Second {
+		t.Fatalf("RetryAfter = %v, want 3s", herr.RetryAfter)
+	}
+}
+
+// TestHTTPErrorNoRetryAfter checks a 4xx with no Retry-After header leaves
+// RetryAfter at its zero value rather than panicking or guessing.
+func TestHTTPErrorNoRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "unknown token"})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	_, _, err := c.PollPurchase(context.Background(), "pt_missing")
+	var herr *client.HTTPError
+	if !errors.As(err, &herr) {
+		t.Fatalf("expected *client.HTTPError, got %T: %v", err, err)
+	}
+	if herr.RetryAfter != 0 {
+		t.Fatalf("RetryAfter = %v, want 0", herr.RetryAfter)
 	}
 }
 

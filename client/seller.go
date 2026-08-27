@@ -2,8 +2,10 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // AppPublic mirrors an app as served by the sell API (the pinned
@@ -57,8 +59,28 @@ func (c *Client) CreateSeller(ctx context.Context) (SellerAccount, error) {
 
 // GetSellerMe fetches the authenticated seller's status: GET /api/sellers/me.
 func (c *Client) GetSellerMe(ctx context.Context, sellerToken string) (SellerMe, error) {
+	return c.getSellerMe(ctx, c.HTTP, sellerToken, 0)
+}
+
+// WaitSellerMe is GetSellerMe with a server-side long-poll hold: it sends
+// ?wait=<seconds> (SPEC §3.3), so the server may park the request until the
+// seller's charges_enabled flips or wait elapses. It never mints an
+// onboarding link on this path — a pending response's OnboardingURL is
+// empty even mid-onboarding. Uses the dedicated long-poll client (see
+// WaitPurchase) so the default HTTP.Timeout can't cut the hold short.
+func (c *Client) WaitSellerMe(ctx context.Context, sellerToken string, wait time.Duration) (SellerMe, error) {
+	ctx, cancel := context.WithTimeout(ctx, wait+longPollExtra)
+	defer cancel()
+	return c.getSellerMe(ctx, c.longPollHTTP, sellerToken, wait)
+}
+
+func (c *Client) getSellerMe(ctx context.Context, httpClient *http.Client, sellerToken string, wait time.Duration) (SellerMe, error) {
+	path := "/api/sellers/me"
+	if wait > 0 {
+		path += fmt.Sprintf("?wait=%d", waitSeconds(wait))
+	}
 	var out SellerMe
-	if err := c.doJSONAuth(ctx, http.MethodGet, "/api/sellers/me", sellerToken, nil, &out); err != nil {
+	if err := c.doJSONWith(ctx, httpClient, http.MethodGet, path, sellerToken, nil, &out); err != nil {
 		return SellerMe{}, err
 	}
 	return out, nil

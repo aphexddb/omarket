@@ -9,16 +9,26 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/aphexddb/omarket/client"
 	"github.com/mdp/qrterminal/v3"
 )
 
-const (
-	pollInterval = 2 * time.Second
-	pollTimeout  = 10 * time.Minute
+// Timing knobs for the layered wait (SPEC §2, §5.2, §5.3). Vars, not
+// consts, so tests can shrink them instead of running for real minutes.
+var (
+	buyLiveBudget       = 10 * time.Minute // wall-clock cap on the whole wait, independent of expires_in
+	buyPhaseADuration   = 10 * time.Second // plain-poll phase: payment normally takes longer than this
+	buyLongPollWait     = 25 * time.Second // per-request ?wait= value once phase A ends (server clamps to <=25s anyway)
+	buyFastPollWindow   = 30 * time.Second // after a wake, how long to fast-poll if still pending
+	buyFastPollInterval = 1 * time.Second  // cadence during that fast-poll window
 )
+
+// defaultPendingTTL is used when the server doesn't send expires_in (an old
+// server): matches Stripe Checkout's default session lifetime (SPEC §3.1).
+const defaultPendingTTL = 24 * time.Hour
 
 var spinnerFrames = []rune{'|', '/', '-', '\\'}
 
@@ -40,38 +50,94 @@ func runBuy(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	c := client.NewClient(client.ResolveServer(*server))
-	checkoutURL, token, err := c.Buy(ctx, appID, *email)
+	serverURL := client.ResolveServer(*server)
+	c := client.NewClient(serverURL)
+
+	// Loopback callback (layer 1): best-effort. A nil cb (nonce/bind
+	// failure) just means the buy request carries no callback fields, and
+	// the wait degrades straight to long-poll after phase A.
+	cb := newCallback()
+	defer cb.close()
+
+	req := client.BuyRequest{App: appID, Email: *email}
+	if cb != nil {
+		req.CallbackPort = cb.port
+		req.CallbackNonce = cb.nonce
+	}
+
+	res, err := c.Buy(ctx, req)
 	if err != nil {
 		return buyStartError(appID, err)
 	}
-	return completePurchase(ctx, c, appID, checkoutURL, token)
+	return completePurchase(ctx, c, appID, serverURL, res, cb)
 }
 
-// runCheckout finishes a purchase the TUI already started (QR + poll +
-// save). It must not POST /api/buy again — that would open a second session.
-func runCheckout(server, appID, checkoutURL, token string) error {
+// runCheckout finishes a purchase the TUI already started (QR + wait +
+// save). It must not POST /api/buy again — that would open a second
+// checkout session. No loopback listener here: the TUI's buy carried no
+// callback fields, so the wait leans on long-poll and the pending record.
+func runCheckout(server, appID string, res client.BuyResult) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return completePurchase(ctx, client.NewClient(server), appID, checkoutURL, token)
+	return completePurchase(ctx, client.NewClient(server), appID, server, res, nil)
 }
 
-func completePurchase(ctx context.Context, c *client.Client, appID, checkoutURL, token string) error {
-	fmt.Println()
-	fmt.Println(checkoutStyle.Render("Checkout: " + checkoutURL))
-	fmt.Println()
-	qrterminal.GenerateHalfBlock(checkoutURL, qrterminal.M, os.Stdout)
-	fmt.Println()
-	fmt.Println(mutedStyle.Render("Waiting for payment... (Ctrl-C to cancel)"))
+// completePurchase runs everything after POST /api/buy has answered:
+// persist the pending record, show the checkout UI, drive the layered wait,
+// and verify-then-save the license. Shared by `omarket buy` and the TUI's
+// checkout handoff.
+func completePurchase(ctx context.Context, c *client.Client, appID, serverURL string, res client.BuyResult, cb *callbackListener) error {
+	if err := persistPending(res, appID, serverURL); err != nil {
+		// Not fatal: the live wait below still runs. Only the
+		// crash/Ctrl-C/timeout recovery guarantee is weaker for this one
+		// purchase, and that's worth a warning, not aborting a purchase the
+		// buyer is about to pay for.
+		fmt.Fprintln(os.Stderr, "warning: could not save pending purchase record:", err)
+	}
 
-	key, err := pollUntilComplete(ctx, c, token)
+	// A ware-only (free) app has nothing to check out: the server already
+	// signed the license, so the very first poll below returns it. Only a
+	// priced purchase gets the checkout URL/QR/wait UI.
+	if res.Free {
+		fmt.Println()
+		if res.Comment != "" {
+			fmt.Println(wareBadge.Render(res.Comment))
+		}
+	} else {
+		fmt.Println()
+		fmt.Println(checkoutStyle.Render("Checkout: " + res.CheckoutURL))
+		fmt.Println()
+		qrterminal.GenerateHalfBlock(res.CheckoutURL, qrterminal.M, os.Stdout)
+		fmt.Println()
+		fmt.Println(mutedStyle.Render("Waiting for payment... (Ctrl-C to cancel)"))
+	}
+
+	cd := &cadence{}
+	cd.observe(res.Interval)
+
+	status, key, err := waitForPurchase(ctx, c, res.Purchase, cd, cb)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			printStillPending()
+			return nil
+		}
+		return err
+	}
+	if status != client.PurchaseComplete {
+		// Live budget elapsed. Not a failure: the pending record saved
+		// above makes this recoverable via `omarket licenses`.
+		printStillPending()
+		return nil
+	}
+
+	pub, err := resolvePublicKey()
 	if err != nil {
 		return err
 	}
-
-	if err := client.SaveLicense(appID, key); err != nil {
-		return fmt.Errorf("saving license: %w", err)
+	if _, err := client.VerifyThenSaveLicense(appID, key, pub); err != nil {
+		return err
 	}
+	_ = client.DeletePending(res.Purchase)
 
 	dir, _ := client.LicensesDir()
 	path := filepath.Join(dir, appID+".key")
@@ -82,7 +148,35 @@ func completePurchase(ctx context.Context, c *client.Client, appID, checkoutURL,
 	return nil
 }
 
+func printStillPending() {
+	fmt.Println(mutedStyle.Render("Purchase still pending - the key lands automatically; check later with `omarket licenses`."))
+}
+
+// persistPending saves the pending-purchase record immediately after Buy
+// returns a token, before anything else is printed — so a Ctrl-C at the QR
+// screen already loses nothing (SPEC §5.3 step 2).
+func persistPending(res client.BuyResult, appID, serverURL string) error {
+	ttl := res.ExpiresIn
+	if ttl <= 0 {
+		ttl = defaultPendingTTL
+	}
+	now := time.Now()
+	return client.SavePending(client.PendingPurchase{
+		Token:     res.Purchase,
+		App:       appID,
+		Server:    serverURL,
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(ttl).Unix(),
+	})
+}
+
 const buyUnavailableMsg = "this listing isn't accepting payments right now"
+
+// edgeErrorPage matches Cloudflare's bare origin-error body ("error code:
+// 502"). The client quotes non-JSON error bodies into HTTPError.Message, so
+// this page arrives as a Message rather than an empty string — but it is
+// the edge talking, not the API, and deserves the same friendly fallback.
+var edgeErrorPage = regexp.MustCompile(`^error code: \d+$`)
 
 // buyStartError turns a failed POST /api/buy into a buyer-facing sentence.
 // Cloudflare rewrites origin 502s into a body-less "error code: 502" page,
@@ -97,7 +191,7 @@ func buyStartError(appID string, err error) error {
 		return fmt.Errorf("%q isn't in the catalog", appID)
 	case http.StatusConflict, http.StatusBadGateway, http.StatusServiceUnavailable:
 		msg := herr.Message
-		if msg == "" || msg == "failed to create checkout session" {
+		if msg == "" || msg == "failed to create checkout session" || edgeErrorPage.MatchString(msg) {
 			msg = buyUnavailableMsg
 		}
 		return fmt.Errorf("couldn't buy %s: %s", appID, msg)
@@ -108,38 +202,111 @@ func buyStartError(appID string, err error) error {
 	return fmt.Errorf("couldn't buy %s: %w", appID, err)
 }
 
-// pollUntilComplete polls /api/purchase/{token} every pollInterval, up to
-// pollTimeout, showing a subtle spinner. It returns the license key once the
-// purchase completes.
-func pollUntilComplete(ctx context.Context, c *client.Client, token string) (string, error) {
-	deadline := time.Now().Add(pollTimeout)
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+// waitForPurchase drives the layered wait until the purchase completes, the
+// live budget (buyLiveBudget) elapses, or ctx is cancelled (SPEC §5.3 step
+// 4). Returns status=="complete" with a key on success; status=="pending"
+// with a nil error on a budget timeout (not a failure); a non-nil error on
+// cancellation or a hard request failure.
+func waitForPurchase(ctx context.Context, c *client.Client, token string, cd *cadence, cb *callbackListener) (status, key string, err error) {
+	deadline := time.Now().Add(buyLiveBudget)
+	phaseAEnd := time.Now().Add(buyPhaseADuration)
+	cbArmed := cb != nil // one-shot: disarmed after the first wake is handled
 
 	frame := 0
-	for {
-		status, key, err := c.PollPurchase(ctx, token)
-		if err != nil {
-			return "", fmt.Errorf("polling purchase: %w", err)
+	spin := func() {
+		fmt.Printf("\r%s %s", string(spinnerFrames[frame%len(spinnerFrames)]), mutedStyle.Render("waiting for payment..."))
+		frame++
+	}
+
+	pollNow := func() (string, string, error) {
+		return pollRetrying(ctx, cd, func() (string, string, error) {
+			return c.PollPurchase(ctx, token)
+		})
+	}
+	waitNow := func() (string, string, error) {
+		return pollRetrying(ctx, cd, func() (string, string, error) {
+			s, k, iv, err := c.WaitPurchase(ctx, token, buyLongPollWait)
+			if err == nil {
+				cd.observe(iv)
+			}
+			return s, k, err
+		})
+	}
+
+	for time.Now().Before(deadline) {
+		spin()
+
+		var perr error
+		if time.Now().Before(phaseAEnd) {
+			status, key, perr = pollNow()
+		} else {
+			status, key, perr = waitNow()
+		}
+		if perr != nil {
+			fmt.Println()
+			return "", "", fmt.Errorf("checking purchase status: %w", perr)
 		}
 		if status == "complete" {
 			fmt.Print("\r")
-			return key, nil
+			return status, key, nil
 		}
 
-		fmt.Printf("\r%s %s", string(spinnerFrames[frame%len(spinnerFrames)]), mutedStyle.Render("waiting for payment..."))
-		frame++
-
-		if time.Now().After(deadline) {
-			fmt.Println()
-			return "", fmt.Errorf("timed out after %s waiting for payment", pollTimeout)
+		var wakeCh <-chan struct{}
+		if cbArmed {
+			wakeCh = cb.wake
 		}
-
 		select {
+		case <-wakeCh:
+			cbArmed = false // consume: a closed channel would otherwise fire on every future select
+			status, key, err = wokenFastPoll(ctx, pollNow, deadline, spin)
+			if err != nil {
+				fmt.Println()
+				return "", "", err
+			}
+			if status == "complete" {
+				fmt.Print("\r")
+				return status, key, nil
+			}
+		case <-time.After(cd.next()):
 		case <-ctx.Done():
 			fmt.Println()
-			return "", fmt.Errorf("cancelled")
-		case <-ticker.C:
+			return "", "", ctx.Err()
 		}
 	}
+
+	fmt.Println()
+	return "pending", "", nil
+}
+
+// wokenFastPoll runs the authoritative re-check triggered by a loopback
+// wake, then — if the redirect outran the webhook — 1s-interval fast polls
+// for buyFastPollWindow before handing back to the caller's normal cadence
+// (SPEC §5.3 step 4, "on wake").
+func wokenFastPoll(ctx context.Context, pollNow func() (string, string, error), deadline time.Time, spin func()) (string, string, error) {
+	spin()
+	status, key, err := pollNow()
+	if err != nil {
+		return "", "", fmt.Errorf("checking purchase status: %w", err)
+	}
+	if status == "complete" {
+		return status, key, nil
+	}
+
+	fastDeadline := time.Now().Add(buyFastPollWindow)
+	for time.Now().Before(fastDeadline) && time.Now().Before(deadline) {
+		select {
+		case <-time.After(buyFastPollInterval):
+		case <-ctx.Done():
+			return "", "", ctx.Err()
+		}
+		spin()
+		status, key, err = pollNow()
+		if err != nil {
+			return "", "", fmt.Errorf("checking purchase status: %w", err)
+		}
+		if status == "complete" {
+			return status, key, nil
+		}
+	}
+	return status, key, nil // still pending; caller resumes its normal cadence
 }

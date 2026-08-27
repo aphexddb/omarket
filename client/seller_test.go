@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/aphexddb/omarket/client"
 )
@@ -65,6 +66,57 @@ func TestGetSellerMe(t *testing.T) {
 		t.Fatalf("GetSellerMe: %v", err)
 	}
 	if !me.ChargesEnabled || len(me.Apps) != 1 {
+		t.Fatalf("me = %+v", me)
+	}
+}
+
+// TestWaitSellerMeSendsWaitParam checks WaitSellerMe sends ?wait=N and
+// parses the response normally.
+func TestWaitSellerMeSendsWaitParam(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_ = json.NewEncoder(w).Encode(client.SellerMe{SellerID: "sel_1", ChargesEnabled: true})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	me, err := c.WaitSellerMe(context.Background(), "sk_test", 7*time.Second)
+	if err != nil {
+		t.Fatalf("WaitSellerMe: %v", err)
+	}
+	if gotQuery != "wait=7" {
+		t.Fatalf("query = %q, want wait=7", gotQuery)
+	}
+	if !me.ChargesEnabled {
+		t.Fatalf("me = %+v", me)
+	}
+}
+
+// TestWaitSellerMeUsesDedicatedClient mirrors the WaitPurchase regression
+// test: a held response must survive a short synthetic HTTP.Timeout because
+// WaitSellerMe routes through the dedicated long-poll client.
+func TestWaitSellerMeUsesDedicatedClient(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+		_ = json.NewEncoder(w).Encode(client.SellerMe{SellerID: "sel_1", ChargesEnabled: true})
+	}))
+	defer srv.Close()
+
+	c := client.NewClient(srv.URL)
+	c.HTTP.Timeout = 30 * time.Millisecond
+
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		close(release)
+	}()
+
+	me, err := c.WaitSellerMe(context.Background(), "sk_test", 5*time.Second)
+	if err != nil {
+		t.Fatalf("WaitSellerMe: %v", err)
+	}
+	if !me.ChargesEnabled {
 		t.Fatalf("me = %+v", me)
 	}
 }

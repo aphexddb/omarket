@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,12 +14,15 @@ import (
 	"time"
 
 	"github.com/aphexddb/omarket/client"
-	"github.com/aphexddb/omarket/license"
 )
 
-const (
-	sellPollInterval = 5 * time.Second
-	sellPollTimeout  = 5 * time.Minute
+// sellStatusWaitPerRequest and sellStatusWaitCap back `sell status -wait`
+// (SPEC §5.6): long-poll GET /api/sellers/me?wait=N, re-issuing until
+// charges_enabled flips or the cap is reached. Vars, not consts, so tests
+// can shrink them.
+var (
+	sellStatusWaitPerRequest = 25 * time.Second
+	sellStatusWaitCap        = 2 * time.Minute
 )
 
 func runSell(args []string) error {
@@ -100,12 +102,13 @@ func printSellNextSteps() {
 }
 
 // runSellPayouts starts (or resumes) Stripe Connect onboarding for the
-// authenticated seller via POST /api/sellers/payouts. If the server hands
-// back a fresh onboarding URL, it opens it in the browser and polls
-// GET /api/sellers/me until charges are enabled (or the poll times out,
-// which is not an error). If onboarding_url comes back empty, charges are
-// already enabled. If the server has no Stripe configured, it returns a 503
-// which is reported and treated as a non-fatal, informational exit.
+// authenticated seller via POST /api/sellers/payouts, then exits. It never
+// polls to wait for onboarding to finish: onboarding is a human filling in
+// bank forms, sometimes over days, so a spinner was always the wrong shape.
+// Check back later with `omarket sell status` (or `sell status -wait`). If
+// onboarding_url comes back empty, charges are already enabled. If the
+// server has no Stripe configured, it returns a 503 which is reported and
+// treated as a non-fatal, informational exit.
 func runSellPayouts(args []string) error {
 	fs := flag.NewFlagSet("sell payouts", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
@@ -120,10 +123,7 @@ func runSellPayouts(args []string) error {
 
 	c := client.NewClient(client.ResolveServer(*server))
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	acct, err := c.StartPayouts(ctx, token)
+	acct, err := c.StartPayouts(context.Background(), token)
 	if err != nil {
 		var herr *client.HTTPError
 		if errors.As(err, &herr) && herr.StatusCode == http.StatusServiceUnavailable {
@@ -135,68 +135,22 @@ func runSellPayouts(args []string) error {
 	}
 
 	if acct.OnboardingURL == "" {
-		fmt.Println(successStyle.Render("★ Payouts already set up — charges are enabled. ★"))
+		fmt.Println(successStyle.Render("★ Payouts already set up - charges are enabled. ★"))
 		return nil
 	}
 
 	fmt.Println()
 	fmt.Println(checkoutStyle.Render("Onboarding: " + acct.OnboardingURL))
-	fmt.Println(mutedStyle.Render("Opening in your browser... (Ctrl-C to stop waiting; finish later and re-check with `omarket sell status`)"))
+	fmt.Println(mutedStyle.Render("Opening in your browser..."))
 	openBrowser(acct.OnboardingURL)
-
-	return pollSellerOnboarding(ctx, c, token, acct.OnboardingURL)
-}
-
-// pollSellerOnboarding polls GET /api/sellers/me every sellPollInterval, up
-// to sellPollTimeout, until charges_enabled is true. Timing out or being
-// cancelled is not an error: it just prints how to finish and re-check
-// later.
-func pollSellerOnboarding(ctx context.Context, c *client.Client, token, onboardingURL string) error {
-	deadline := time.Now().Add(sellPollTimeout)
-	ticker := time.NewTicker(sellPollInterval)
-	defer ticker.Stop()
-
-	printLater := func() {
-		fmt.Println(mutedStyle.Render("Finish onboarding at:"))
-		fmt.Println(checkoutStyle.Render(onboardingURL))
-		fmt.Println(mutedStyle.Render("Re-check any time with `omarket sell status`."))
-	}
-
-	frame := 0
-	for {
-		me, err := c.GetSellerMe(ctx, token)
-		if err != nil {
-			return fmt.Errorf("checking seller status: %w", err)
-		}
-		if me.ChargesEnabled {
-			fmt.Print("\r")
-			fmt.Println(successStyle.Render("★ Onboarding complete — you can now claim and sell apps. ★"))
-			return nil
-		}
-
-		fmt.Printf("\r%s %s", string(spinnerFrames[frame%len(spinnerFrames)]), mutedStyle.Render("waiting for onboarding to complete..."))
-		frame++
-
-		if time.Now().After(deadline) {
-			fmt.Println()
-			fmt.Println(mutedStyle.Render("Still not enabled after " + sellPollTimeout.String() + "."))
-			printLater()
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			fmt.Println()
-			printLater()
-			return nil
-		case <-ticker.C:
-		}
-	}
+	fmt.Println(mutedStyle.Render("check with `omarket sell status` whenever you're done"))
+	return nil
 }
 
 func runSellStatus(args []string) error {
 	fs := flag.NewFlagSet("sell status", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
+	wait := fs.Bool("wait", false, fmt.Sprintf("long-poll for a status change, up to %s", sellStatusWaitCap))
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -207,12 +161,65 @@ func runSellStatus(args []string) error {
 	}
 
 	c := client.NewClient(client.ResolveServer(*server))
-	me, err := c.GetSellerMe(context.Background(), token)
+
+	if !*wait {
+		me, err := c.GetSellerMe(context.Background(), token)
+		if err != nil {
+			return fmt.Errorf("fetching seller status: %w", err)
+		}
+		printSellerStatus(me)
+		return nil
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	me, err := waitSellerStatus(ctx, c, token)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
 		return fmt.Errorf("fetching seller status: %w", err)
 	}
 	printSellerStatus(me)
 	return nil
+}
+
+// waitSellerStatus long-polls GET /api/sellers/me?wait=N (SPEC §3.3) up to
+// sellStatusWaitCap, using the shared cadence/429 handling so an old server
+// (which ignores ?wait= and answers instantly) degrades to the same
+// decay+jitter floor as everywhere else instead of a hot loop. It returns
+// as soon as charges become enabled, or once the cap is reached — either
+// way that's the caller's cue to print status, not an error.
+func waitSellerStatus(ctx context.Context, c *client.Client, token string) (client.SellerMe, error) {
+	deadline := time.Now().Add(sellStatusWaitCap)
+	cd := &cadence{}
+
+	waitNow := func() (client.SellerMe, error) {
+		var me client.SellerMe
+		_, _, err := pollRetrying(ctx, cd, func() (string, string, error) {
+			var werr error
+			me, werr = c.WaitSellerMe(ctx, token, sellStatusWaitPerRequest)
+			return "", "", werr
+		})
+		return me, err
+	}
+
+	for {
+		me, err := waitNow()
+		if err != nil {
+			return client.SellerMe{}, err
+		}
+		if me.ChargesEnabled || !time.Now().Before(deadline) {
+			return me, nil
+		}
+
+		select {
+		case <-time.After(cd.next()):
+		case <-ctx.Done():
+			return client.SellerMe{}, ctx.Err()
+		}
+	}
 }
 
 func printSellerStatus(me client.SellerMe) {
@@ -275,14 +282,27 @@ func runSellClaim(args []string) error {
 		return fmt.Errorf("claiming %q: %w", id, err)
 	}
 
-	if err := client.WriteManifestTemplate(client.ManifestFilename, app.ID); err != nil {
+	// Only pre-fill the author field with something already meant to be
+	// public (a GitHub handle); a private candidate (an email address) is
+	// left for the seller to confirm themselves rather than silently
+	// published (client.AuthorCandidate.Private).
+	candidate := client.GitAuthorCandidate()
+	prefill := ""
+	if candidate.Found() && !candidate.Private() {
+		prefill = candidate.Value
+	}
+
+	if err := client.WriteManifestTemplate(client.ManifestFilename, app.ID, prefill); err != nil {
 		return err
 	}
 
 	fmt.Println(successStyle.Render("Claimed " + app.ID))
 	fmt.Printf("Generated %s — edit it, then run `omarket sell push`.\n", client.ManifestFilename)
-	if author := client.GitAuthor(); author != "" {
-		fmt.Println(mutedStyle.Render("Pre-filled author from git config: " + author))
+	switch {
+	case prefill != "":
+		fmt.Println(mutedStyle.Render("Pre-filled author from git config: " + prefill))
+	case candidate.Found():
+		fmt.Println(mutedStyle.Render("git config has an author candidate, but it looks private; fill in \"author\" yourself."))
 	}
 	printWareSuggestions()
 	return nil
@@ -397,7 +417,7 @@ func runSellTestkey(args []string) error {
 		return err
 	}
 
-	lic, err := verifyThenSaveLicense(id, key, pub)
+	lic, err := client.VerifyThenSaveLicense(id, key, pub)
 	if err != nil {
 		return err
 	}
@@ -411,26 +431,13 @@ func runSellTestkey(args []string) error {
 	return nil
 }
 
-// verifyThenSaveLicense verifies key against pub *before* writing anything
-// to disk, and only saves it (as app's stored license) once verification
-// succeeds. This ordering matters: if the server that issued key signs with
-// a different key than this build's resolved public key (e.g. a local dev
-// stack with its own keypair), we must not leave an unverifiable license
-// file behind for a future `omarket licenses` or app run to trip over.
-func verifyThenSaveLicense(app, key string, pub ed25519.PublicKey) (*license.License, error) {
-	lic, err := license.Verify(key, pub)
-	if err != nil {
-		return nil, fmt.Errorf("verifying test license: %w (the server's signing key may not match this build's public key — e.g. a local stack; nothing was saved)", err)
-	}
-	if err := client.SaveLicense(app, key); err != nil {
-		return nil, fmt.Errorf("saving license: %w", err)
-	}
-	return lic, nil
-}
-
 // openBrowser best-effort opens url in the platform default browser. Errors
 // are ignored: the URL was already printed, so failing to auto-open is fine.
-func openBrowser(url string) {
+// A var, not a func, so tests can stub it out instead of actually spawning
+// a browser process.
+var openBrowser = defaultOpenBrowser
+
+func defaultOpenBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "linux":
