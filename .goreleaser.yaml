@@ -15,6 +15,7 @@ builds:
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w
       - -X github.com/aphexddb/omarket/internal/version.Version={{.Version}}
@@ -23,6 +24,7 @@ builds:
 
 archives:
   - formats: [tar.gz]
+    wrap_in_directory: false
     name_template: >-
       {{ .ProjectName }}_
       {{- .Os }}_
@@ -37,6 +39,7 @@ archives:
 
 checksum:
   name_template: checksums.txt
+  algorithm: sha256
 
 changelog:
   use: git
@@ -54,6 +57,7 @@ snapshot:
 
 release:
   name_template: "v{{ .Version }}"
+  prerelease: auto
   footer: >-
 
     ---
