@@ -36,6 +36,7 @@ func testApps() []client.App {
 func testModel(w, h int) model {
 	m := newModel("https://omarket.dev")
 	m.apps = testApps()
+	m.loaded = true
 	m.width, m.height = w, h
 	m.applyFilter()
 	return m
@@ -418,6 +419,45 @@ func TestBuyNoticeFitsWidth(t *testing.T) {
 	}
 	if got := strings.Count(m.View(), "\n") + 1; got != 24 {
 		t.Errorf("view is %d lines, want 24", got)
+	}
+}
+
+func TestCatalogEmptyShowsEmptyState(t *testing.T) {
+	m := newModel("https://omarket.dev")
+	m.width, m.height = 80, 24
+	plain := ansi.Strip(m.View())
+	if !strings.Contains(plain, "loading catalog...") {
+		t.Fatalf("unloaded view should say loading:\n%s", plain)
+	}
+	if strings.Contains(plain, "catalog empty") {
+		t.Fatalf("unloaded view should not say empty:\n%s", plain)
+	}
+
+	updated, quit := m.Update(catalogMsg{apps: []client.App{}})
+	if quit != nil {
+		t.Fatal("empty catalog must not quit")
+	}
+	got := mustModel(t, updated)
+	if !got.loaded {
+		t.Fatal("successful empty fetch should mark the catalog loaded")
+	}
+	plain = ansi.Strip(got.View())
+	if strings.Contains(plain, "loading catalog...") {
+		t.Fatalf("empty catalog still looks like loading:\n%s", plain)
+	}
+	if !strings.Contains(plain, "catalog empty") {
+		t.Fatalf("empty catalog missing empty state:\n%s", plain)
+	}
+	if !strings.Contains(plain, "0 apps") {
+		t.Fatalf("empty catalog missing 0 apps count:\n%s", plain)
+	}
+
+	// JSON null / omitted apps is the same as [].
+	updated, _ = m.Update(catalogMsg{apps: nil})
+	got = mustModel(t, updated)
+	plain = ansi.Strip(got.View())
+	if strings.Contains(plain, "loading catalog...") || !strings.Contains(plain, "catalog empty") {
+		t.Fatalf("nil apps after a successful fetch should look empty:\n%s", plain)
 	}
 }
 

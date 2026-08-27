@@ -143,6 +143,9 @@ type model struct {
 	state  viewState
 	detail *client.App
 
+	// loaded is true after a successful catalog fetch, including an empty
+	// one. Distinguishes "still waiting" from "the catalog really has no apps".
+	loaded bool
 	// loadErr is a failed catalog fetch. It is shown in the list body, not
 	// as a process-killing crash; r retries.
 	loadErr error
@@ -183,7 +186,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.loadErr = nil
+		m.loaded = true
 		m.apps = msg.apps
+		if m.apps == nil {
+			m.apps = []client.App{}
+		}
 		m.stale = msg.stale
 		m.applyFilter()
 		return m, nil
@@ -592,7 +599,11 @@ func (m model) renderList() string {
 	// Title bar: name left; app count and server right.
 	right := fmt.Sprintf("%d/%d apps · %s", len(m.filtered), len(m.apps), serverHost(m.server))
 	if len(m.apps) == 0 {
-		right = serverHost(m.server)
+		if m.loaded {
+			right = fmt.Sprintf("0 apps · %s", serverHost(m.server))
+		} else {
+			right = serverHost(m.server)
+		}
 	}
 	if m.stale {
 		right += " (cached)"
@@ -625,8 +636,11 @@ func (m model) renderList() string {
 	if m.loadErr != nil && len(m.apps) == 0 {
 		b.WriteString(errorStyle.Render(truncCell("  Couldn't load the catalog. r retries.", w)) + "\n")
 		linesUsed++
-	} else if len(m.apps) == 0 {
+	} else if len(m.apps) == 0 && !m.loaded {
 		b.WriteString(mutedStyle.Render("  loading catalog...") + "\n")
+		linesUsed++
+	} else if len(m.apps) == 0 {
+		b.WriteString(mutedStyle.Render("  catalog empty") + "\n")
 		linesUsed++
 	} else if len(m.filtered) == 0 {
 		b.WriteString(mutedStyle.Render("  no apps match") + "\n")
@@ -678,6 +692,8 @@ func (m model) renderList() string {
 	help := "↑/k ↓/j move · enter detail · i install · b buy · / filter · q quit"
 	if m.loadErr != nil && len(m.apps) == 0 {
 		help = "r retry · q quit"
+	} else if m.loaded && len(m.apps) == 0 {
+		help = "q quit"
 	}
 	pos := ""
 	if len(m.filtered) > 0 {
