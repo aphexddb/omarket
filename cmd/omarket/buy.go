@@ -105,7 +105,15 @@ func completePurchase(ctx context.Context, c *client.Client, appID, serverURL st
 		fmt.Println()
 		fmt.Println(checkoutStyle.Render("Checkout: " + res.CheckoutURL))
 		fmt.Println()
-		qrterminal.GenerateHalfBlock(res.CheckoutURL, qrterminal.M, os.Stdout)
+		// L + quiet 2 is qrterminal's compact path. GenerateHalfBlock
+		// hard-codes M and a 4-module quiet zone, which is a wall of
+		// cells on a 13" display.
+		qrterminal.GenerateWithConfig(res.CheckoutURL, qrterminal.Config{
+			Level:      qrterminal.L,
+			Writer:     os.Stdout,
+			HalfBlocks: true,
+			QuietZone:  2,
+		})
 		fmt.Println()
 		fmt.Println(mutedStyle.Render("Waiting for payment... (Ctrl-C to cancel)"))
 	}
