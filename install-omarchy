@@ -1,17 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo="aphexddb/omarket"
 prefix="${OMARKET_PREFIX:-$HOME/.local}"
+tag="${OMARKET_VERSION:-latest}"
 
-if ! command -v omarchy-pkg-add >/dev/null; then
-  printf 'install-omarchy: omarchy-pkg-add is unavailable; this installer requires Omarchy\n' >&2
+if ! command -v omarchy >/dev/null; then
+  printf 'install-omarchy: this installer requires Omarchy\n' >&2
   exit 1
 fi
 
-omarchy-pkg-add go
+for need in curl tar sha256sum install; do
+  if ! command -v "$need" >/dev/null; then
+    printf 'install-omarchy: %s is required\n' "$need" >&2
+    exit 1
+  fi
+done
 
-make -C "$repo_dir" build
+os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+arch="$(uname -m)"
+
+if [[ "$os" != "linux" ]]; then
+  printf 'install-omarchy: Omarchy is Linux-only (got %s)\n' "$os" >&2
+  exit 1
+fi
+
+case "$arch" in
+  x86_64 | amd64) arch="x86_64" ;;
+  aarch64 | arm64) arch="arm64" ;;
+  *)
+    printf 'install-omarchy: unsupported architecture %s\n' "$arch" >&2
+    exit 1
+    ;;
+esac
+
+asset="omarket_${os}_${arch}.tar.gz"
+
+if [[ -n ${OMARKET_RELEASE_BASE:-} ]]; then
+  base="${OMARKET_RELEASE_BASE%/}"
+elif [[ "$tag" == "latest" ]]; then
+  base="https://github.com/${repo}/releases/latest/download"
+else
+  [[ "$tag" == v* ]] || tag="v${tag}"
+  base="https://github.com/${repo}/releases/download/${tag}"
+fi
+
+curl_get() {
+  local dest="$1" url="$2"
+  if [[ "$url" == https://* ]]; then
+    curl -fsSL --proto '=https' --tlsv1.2 -o "$dest" "$url"
+  else
+    curl -fsSL -o "$dest" "$url"
+  fi
+}
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+printf 'install-omarchy: downloading %s (%s)\n' "$asset" "$tag" >&2
+curl_get "$tmp/$asset" "$base/$asset"
+curl_get "$tmp/checksums.txt" "$base/checksums.txt"
+
+if ! grep -E "[[:space:]]${asset}\$" "$tmp/checksums.txt" | (cd "$tmp" && sha256sum -c -); then
+  printf 'install-omarchy: checksum verification failed for %s\n' "$asset" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp/$asset" -C "$tmp" omarket
 install -d "$prefix/bin"
-install -m755 "$repo_dir/omarket" "$prefix/bin/omarket"
+install -m755 "$tmp/omarket" "$prefix/bin/omarket"
 "$prefix/bin/omarket" version

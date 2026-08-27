@@ -8,19 +8,15 @@ server is [omarket.dev](https://omarket.dev).
 
 ## Install on Omarchy
 
-Clone the repository and run the Omarchy installer:
-
 ```bash
-git clone https://github.com/aphexddb/omarket.git
-cd omarket
-./install-omarchy
+curl -fsSL https://raw.githubusercontent.com/aphexddb/omarket/master/install-omarchy | bash
 ```
 
-The installer uses Omarchy's package helper for Go if it's missing, builds,
-and installs to `~/.local/bin`. Make sure that's on your `PATH`.
+The installer downloads the latest GitHub release and puts the binary in
+`~/.local/bin`. Make sure that's on your `PATH`.
 
-Set `OMARKET_PREFIX` before running `install-omarchy` to use a prefix other
-than `~/.local`.
+Set `OMARKET_PREFIX` to install somewhere other than `~/.local`, or
+`OMARKET_VERSION` (e.g. `v0.1.0`) to pin a release instead of `latest`.
 
 ### Other systems
 
