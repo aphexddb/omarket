@@ -37,6 +37,7 @@ func run(args []string) error {
 		return runVerify(args[1:])
 	case "version", "-v", "--version":
 		fmt.Println(version.String())
+		printWareHistory()
 		return nil
 	case "-h", "--help", "help":
 		usage()
@@ -53,6 +54,28 @@ func run(args []string) error {
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", args[0])
+	}
+}
+
+// printWareHistory tacks a little "-ware" lore onto `omarket version` —
+// lines are hand-wrapped so the ware names can be highlighted inline
+// without fighting a styled-text wrapper.
+func printWareHistory() {
+	ware := wareNameStyle.Render
+	m := mutedStyle.Render
+	fmt.Println()
+	for _, line := range []string{
+		m(`A word on "-ware": in 1982 Andrew Fluegelman mailed PC-Talk to anyone who`),
+		m("sent him a disk, called it ") + ware("freeware") + m(", and promptly trademarked the word."),
+		m("A year later Bob Wallace named PC-Write ") + ware("shareware") + m(" — try it, pass it along,"),
+		m("pay if it stays. The suffix has been generous ever since: Poul-Henning"),
+		m("Kamp's ") + ware("beerware") + m(" license (revision 42) asks only for a beer if you ever"),
+		m("meet him, Aaron Giles's JPEGView was ") + ware("postcardware") + m(" and drew thousands of"),
+		m("postcards to his door, Vim is ") + ware("charityware") + m(" for children in Uganda, and"),
+		m("Paul Lutus released Arachnophilia as ") + ware("careware") + m(", payable strictly in good"),
+		m("deeds. Whatever you ship, ship it as something-ware."),
+	} {
+		fmt.Println(line)
 	}
 }
 
