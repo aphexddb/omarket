@@ -66,7 +66,7 @@ hands your binary a buyer's email. `kind` is `personal`, `team`, or `test`
 (what `omarket sell testkey` mints). There is no expiry field: a key is good
 forever, which is the deal.
 
-Full details in [docs/SPEC.md §1](../docs/SPEC.md).
+Full details in [docs/SPEC.md](../docs/SPEC.md#license-keys-shrw1).
 
 ## What every example does, in the same order
 
