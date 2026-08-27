@@ -109,7 +109,6 @@ different shape.
   "price_cents": 900,
   "currency": "usd",
   "stripe_account": "acct_XXX",
-  "kind": "source-included",
   "ware": "shareware",
   "comment": "Try it free. Buy a key if you keep it around.",
   "author": "aphexddb",
@@ -119,8 +118,6 @@ different shape.
 ```
 
 - `price_cents: 0` — free; no buy flow.
-- `kind`: `"source-included"` (featured tier) or `"closed"`. This is the
-  distribution tier, a separate axis from `ware`.
 - `ware`: the "-ware" tradition the listing follows — `"shareware"`,
   `"beerware"`, `"coffeeware"`, `"charityware"`, and so on. Free-form, not
   an enum; max 64 chars, defaults to `"shareware"` when empty.

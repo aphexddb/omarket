@@ -30,7 +30,6 @@ type App struct {
 	PriceCents    int      `json:"price_cents"`
 	Currency      string   `json:"currency"`
 	StripeAccount string   `json:"stripe_account"`
-	Kind          string   `json:"kind"`
 	Ware          string   `json:"ware"`
 	Comment       string   `json:"comment"`
 	Author        string   `json:"author"`

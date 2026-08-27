@@ -548,7 +548,6 @@ func (m model) renderDetail() string {
 		}
 		fmt.Fprintf(&b, "%s %s\n", labelStyle.Render(padCell(label, 9)), truncCell(value, w-10))
 	}
-	row("kind", a.Kind)
 	row("source", a.Source)
 	row("homepage", a.Homepage)
 	row("package", a.Pkgname)

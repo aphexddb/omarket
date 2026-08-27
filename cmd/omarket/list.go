@@ -89,7 +89,6 @@ func runInfo(args []string) error {
 	if a.Author != "" {
 		fmt.Printf("  author:   %s\n", a.Author)
 	}
-	fmt.Printf("  kind:     %s\n", a.Kind)
 	fmt.Printf("  homepage: %s\n", a.Homepage)
 	fmt.Printf("  source:   %s\n", a.Source)
 	fmt.Printf("  package:  %s\n", a.Pkgname)
