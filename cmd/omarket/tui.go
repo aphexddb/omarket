@@ -627,10 +627,15 @@ func (m model) renderList() string {
 		b.WriteString("\n")
 	}
 
-	// Column headers. NAME spans the name column plus the 2-cell owned marker.
-	header := padCell("NAME", cols.name+2) + gap + padCell("WARE", cols.ware) +
-		gap + padLeft("PRICE", cols.price) + gap + "DESCRIPTION"
-	b.WriteString("  " + mutedStyle.Render(truncCell(header, w-2)) + "\n")
+	// Column headers belong to a table. An empty, loading, or failed
+	// catalog is a status, not a zero-row table — "catalog empty" under
+	// NAME looks like an app named that.
+	showTable := len(m.apps) > 0
+	if showTable {
+		header := padCell("NAME", cols.name+2) + gap + padCell("WARE", cols.ware) +
+			gap + padLeft("PRICE", cols.price) + gap + "DESCRIPTION"
+		b.WriteString("  " + mutedStyle.Render(truncCell(header, w-2)) + "\n")
+	}
 
 	linesUsed := 0
 	if m.loadErr != nil && len(m.apps) == 0 {
@@ -648,6 +653,10 @@ func (m model) renderList() string {
 	}
 
 	visible := m.visibleRows()
+	if !showTable {
+		// Header line was skipped; keep the view the same height.
+		visible++
+	}
 	end := m.offset + visible
 	if end > len(m.filtered) {
 		end = len(m.filtered)

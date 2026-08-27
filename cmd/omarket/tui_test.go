@@ -432,6 +432,9 @@ func TestCatalogEmptyShowsEmptyState(t *testing.T) {
 	if strings.Contains(plain, "catalog empty") {
 		t.Fatalf("unloaded view should not say empty:\n%s", plain)
 	}
+	if strings.Contains(plain, "DESCRIPTION") {
+		t.Fatalf("loading view should not show table headers:\n%s", plain)
+	}
 
 	updated, quit := m.Update(catalogMsg{apps: []client.App{}})
 	if quit != nil {
@@ -450,6 +453,14 @@ func TestCatalogEmptyShowsEmptyState(t *testing.T) {
 	}
 	if !strings.Contains(plain, "0 apps") {
 		t.Fatalf("empty catalog missing 0 apps count:\n%s", plain)
+	}
+	for _, header := range []string{"NAME", "WARE", "PRICE", "DESCRIPTION"} {
+		if strings.Contains(plain, header) {
+			t.Fatalf("empty catalog should not show table headers, found %q:\n%s", header, plain)
+		}
+	}
+	if got := strings.Count(got.View(), "\n") + 1; got != 24 {
+		t.Errorf("empty view is %d lines, want 24", got)
 	}
 
 	// JSON null / omitted apps is the same as [].
