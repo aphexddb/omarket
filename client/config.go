@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // DefaultServer is used when no server is configured by flag, env, or file.
@@ -82,6 +83,15 @@ func SaveConfig(c Config) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o600)
+}
+
+// PageURL returns the shareable landing page for a listing on server: the
+// /a/{id} page the platform serves. Built client-side rather than fetched:
+// the path is part of the server's permanent public URL space — it is
+// exactly what sellers paste into chats — so it is as stable a contract as
+// the API routes themselves.
+func PageURL(server, appID string) string {
+	return strings.TrimRight(server, "/") + "/a/" + appID
 }
 
 // ResolveServer applies the server precedence: --server flag value (if

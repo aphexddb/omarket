@@ -164,7 +164,7 @@ func runSellInit(args []string) error {
 		if err != nil {
 			return sellAPIError("fetching seller status", err)
 		}
-		printSellerStatus(me)
+		printSellerStatus(me, c.BaseURL)
 		printSellNextSteps()
 		return nil
 	}
@@ -261,7 +261,7 @@ func runSellStatus(args []string) error {
 		if err != nil {
 			return sellAPIError("fetching seller status", err)
 		}
-		printSellerStatus(me)
+		printSellerStatus(me, c.BaseURL)
 		return nil
 	}
 
@@ -275,7 +275,7 @@ func runSellStatus(args []string) error {
 		}
 		return sellAPIError("fetching seller status", err)
 	}
-	printSellerStatus(me)
+	printSellerStatus(me, c.BaseURL)
 	return nil
 }
 
@@ -316,7 +316,7 @@ func waitSellerStatus(ctx context.Context, c *client.Client, token string) (clie
 	}
 }
 
-func printSellerStatus(me client.SellerMe) {
+func printSellerStatus(me client.SellerMe, server string) {
 	fmt.Printf("seller:          %s\n", me.SellerID)
 	fmt.Printf("charges enabled: %v\n", me.ChargesEnabled)
 	if !me.ChargesEnabled && me.OnboardingURL != "" {
@@ -333,8 +333,11 @@ func printSellerStatus(me client.SellerMe) {
 			}
 			// formatPriceOrWare, not a raw dollar figure: a $0.00 here means
 			// a ware-only listing, and naming the ware says what it asks for.
-			fmt.Printf("  %-24s %-8s %s\n", cell(a.ID), listed,
-				cell(formatPriceOrWare(int64(a.PriceUSDCents), a.Ware)))
+			// The page URL rides along so the share link is recoverable any
+			// time, not only in the sell push output.
+			fmt.Printf("  %-24s %-8s %-14s %s\n", cell(a.ID), listed,
+				cell(formatPriceOrWare(int64(a.PriceUSDCents), a.Ware)),
+				client.PageURL(server, a.ID))
 		}
 	}
 
@@ -475,6 +478,7 @@ func runSellPush(args []string) error {
 	fmt.Printf("  name:     %s\n", app.Name)
 	fmt.Printf("  price:    %s\n", formatPriceOrWare(int64(app.PriceUSDCents), app.Ware))
 	fmt.Printf("  homepage: %s\n", app.Homepage)
+	fmt.Printf("  page:     %s\n", client.PageURL(c.BaseURL, app.ID))
 	fmt.Println(mutedStyle.Render("Claimed and buyable by exact name; appearing in the browse catalog is curated by the platform."))
 
 	if app.PriceUSDCents == 0 {

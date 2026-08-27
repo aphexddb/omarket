@@ -70,3 +70,13 @@ func TestResolveServerPrecedence(t *testing.T) {
 		t.Fatalf("flag: got %q", got)
 	}
 }
+
+func TestPageURL(t *testing.T) {
+	if got := client.PageURL("https://omarket.dev", "hello-shareware"); got != "https://omarket.dev/a/hello-shareware" {
+		t.Fatalf("PageURL: got %q", got)
+	}
+	// A trailing slash on the configured server must not double up.
+	if got := client.PageURL("http://localhost:8484/", "my-app"); got != "http://localhost:8484/a/my-app" {
+		t.Fatalf("PageURL with trailing slash: got %q", got)
+	}
+}

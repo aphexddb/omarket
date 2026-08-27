@@ -909,6 +909,7 @@ func (m model) renderDetail() string {
 	}
 	row("source", a.Source)
 	row("homepage", a.Homepage)
+	row("page", client.PageURL(m.server, a.ID))
 	row("package", a.Pkgname)
 	if len(a.Tags) > 0 {
 		row("tags", strings.Join(a.Tags, ", "))
