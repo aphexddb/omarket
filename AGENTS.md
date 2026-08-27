@@ -102,8 +102,8 @@ valid, a tampered, and a wrong-app key handled.
   it; do not invent another mechanism.
 - **No expiry, no revocation, no seat counting.** `issued_at` is provenance,
   not a deadline. Do not add time checks.
-- **`kind` is `personal`, `team`, or `test`.** Treat `test` as registered;
-  say so in the UI if it matters.
+- **`kind` is `personal`, `ware`, `team`, or `test`.** Treat `ware` (a free,
+  ware-only listing) and `test` as registered; say so in the UI if it matters.
 - **`email_sha256` is a hash.** The platform never gives your binary a buyer's
   address. Do not try to reverse it.
 - **Unregistered is not an error.** Nag and keep running. That is shareware.

@@ -87,6 +87,11 @@ unchanged.
 - `interval` — poll cadence, seconds.
 - `expires_in` — seconds the token remains pollable.
 
+```
+409 {"error": "..."}    seller has no payouts set up, or the id is claimed
+                        but never published (no PUT /api/apps/{id} yet)
+```
+
 Callback: when `callback_port`/`callback_nonce` are set, the Stripe
 `success_url` is
 `{server}/success?purchase={token}&cb_port={port}&cb_nonce={nonce}`. The
@@ -174,6 +179,23 @@ No auth. Body `{}`.
   always returns `""`.
 - `?wait=N` holds for a `charges_enabled` change.
 
+### GET /api/sellers/stats
+
+```
+200 {"seller_id",
+     "apps": [{"id", "name", "price_usd_cents", "ware", "listed",
+               "licenses", "gross_usd_cents"}, ...],
+     "total_licenses", "total_gross_usd_cents"}
+```
+
+- One row per live app the seller owns, sorted by id, including apps that
+  have sold nothing.
+- `licenses` — completed purchases only; an abandoned checkout is not a
+  sale. Free acquisitions count.
+- `gross_usd_cents` — `price_usd_cents * licenses` at the app's *current*
+  price. An estimate, before the platform fee and Stripe's cut.
+- Never calls Stripe.
+
 ### POST /api/sellers/payouts
 
 Body `{}`.
@@ -221,6 +243,11 @@ Owner only.
 400 {"error": "..."}    invalid field
 ```
 
+- `price_usd_cents` — either `0` or at least `100` ($1.00). `1`-`99` is
+  rejected. `0` is a ware-only listing: no payment, no Stripe account
+  required, and buyers see the `ware` and `comment` instead of a checkout
+  page.
+
 ### POST /api/apps/{id}/test-license
 
 Owner only.
@@ -254,7 +281,8 @@ Payload:
 }
 ```
 
-- `kind` — `"personal"`, `"team"`, or `"test"`.
+- `kind` — `"personal"` (paid), `"ware"` (free acquisition of a ware-only
+  listing), `"team"`, or `"test"`.
 
 ## Notes
 
