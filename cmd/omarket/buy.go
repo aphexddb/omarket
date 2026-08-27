@@ -100,10 +100,7 @@ func completePurchase(ctx context.Context, c *client.Client, appID, serverURL st
 	// signed the license, so the very first poll below returns it. Only a
 	// priced purchase gets the checkout URL/QR/wait UI.
 	if res.Free {
-		fmt.Println()
-		if res.Comment != "" {
-			fmt.Println(wareBadge.Render(res.Comment))
-		}
+		printWareAsk(os.Stdout, res)
 	} else {
 		fmt.Println()
 		fmt.Println(checkoutStyle.Render("Checkout: " + res.CheckoutURL))
@@ -116,7 +113,7 @@ func completePurchase(ctx context.Context, c *client.Client, appID, serverURL st
 	cd := &cadence{}
 	cd.observe(res.Interval)
 
-	status, key, err := waitForPurchase(ctx, c, res.Purchase, cd, cb)
+	status, key, err := collectPurchase(ctx, c, res, cd, cb)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			printStillPending()

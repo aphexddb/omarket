@@ -32,6 +32,7 @@ omarket sell push            # publishes it; refuses template placeholders
 omarket sell testkey         # mints a kind:"test" license so you can test
 omarket sell payouts         # Stripe onboarding, when you want the money
 omarket sell status          # seller account + claimed apps
+omarket sell stats           # licenses sold, per app
 ```
 
 App id must match `^[a-z0-9-]{3,64}$`. Some names, including `omarket`, are

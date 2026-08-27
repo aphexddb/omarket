@@ -50,6 +50,8 @@ func runSell(args []string) error {
 		return runSellPayouts(args[1:])
 	case "status":
 		return runSellStatus(args[1:])
+	case "stats":
+		return runSellStats(args[1:])
 	default:
 		printSellUsage()
 		return fmt.Errorf("unknown sell command %q", args[0])
@@ -62,13 +64,14 @@ const sellAppIDRule = `app id: 3-64 characters, lowercase letters, digits, and h
 (no leading or trailing hyphen). Some names, including "omarket", are reserved.`
 
 func printSellUsage() {
-	fmt.Fprintln(os.Stderr, `usage: omarket sell <init|claim|push|testkey|payouts|status>
+	fmt.Fprintln(os.Stderr, `usage: omarket sell <init|claim|push|testkey|payouts|status|stats>
   init                 start selling: instant, no Stripe needed
   claim <app-id>       claim an app id, writes ./omarket.json
   push                 push omarket.json (name/description/price)
   testkey [app]        mint yourself a local test license
   payouts              set up getting paid: Stripe onboarding in browser
   status               seller account + app status
+  stats                licenses sold, per app
 
 With no subcommand, prints this help, or seller status if a seller account already exists.
 
@@ -328,7 +331,10 @@ func printSellerStatus(me client.SellerMe) {
 			if a.Listed {
 				listed = "listed"
 			}
-			fmt.Printf("  %-24s %-8s $%.2f\n", a.ID, listed, float64(a.PriceUSDCents)/100)
+			// formatPriceOrWare, not a raw dollar figure: a $0.00 here means
+			// a ware-only listing, and naming the ware says what it asks for.
+			fmt.Printf("  %-24s %-8s %s\n", cell(a.ID), listed,
+				cell(formatPriceOrWare(int64(a.PriceUSDCents), a.Ware)))
 		}
 	}
 
@@ -378,27 +384,20 @@ func runSellClaim(args []string) error {
 		return claimError(id, err)
 	}
 
-	// Only pre-fill the author field with something already meant to be
-	// public (a GitHub handle); a private candidate (an email address) is
-	// left for the seller to confirm themselves rather than silently
-	// published (client.AuthorCandidate.Private).
-	candidate := client.GitAuthorCandidate()
-	prefill := ""
-	if candidate.Found() && !candidate.Private() {
-		prefill = candidate.Value
-	}
+	// The author field is published. git config is asked for a suggestion,
+	// but an email address is only used with the seller's explicit yes —
+	// see resolveManifestAuthor for why the two candidate kinds are treated
+	// differently.
+	author, note := resolveManifestAuthor(newPrompter(), client.GitAuthorCandidate())
 
-	if err := client.WriteManifestTemplate(client.ManifestFilename, app.ID, prefill); err != nil {
+	if err := client.WriteManifestTemplate(client.ManifestFilename, app.ID, author); err != nil {
 		return err
 	}
 
 	fmt.Println(successStyle.Render("Claimed " + app.ID))
 	fmt.Printf("Generated %s — edit it, then run `omarket sell push`.\n", client.ManifestFilename)
-	switch {
-	case prefill != "":
-		fmt.Println(mutedStyle.Render("Pre-filled author from git config: " + prefill))
-	case candidate.Found():
-		fmt.Println(mutedStyle.Render("git config has an author candidate, but it looks private; fill in \"author\" yourself."))
+	if note != "" {
+		fmt.Println(mutedStyle.Render(note))
 	}
 	printWareSuggestions()
 	return nil
@@ -420,6 +419,9 @@ func printWareSuggestions() {
 	}
 	fmt.Println()
 	fmt.Println(mutedStyle.Render(`Then say it in "comment", e.g. "Buy me a beer if you like this tool. Cheers!"`))
+	fmt.Println(mutedStyle.Render(fmt.Sprintf(
+		`Set "price_usd_cents" to 0 and the ware is the whole ask — no payment, no Stripe. Otherwise it's $%.2f or more.`,
+		float64(client.MinPriceUSDCents)/100)))
 }
 
 // pad right-pads s to width so the blurbs line up. Names are plain ASCII
@@ -434,6 +436,7 @@ func pad(s string, width int) string {
 func runSellPush(args []string) error {
 	fs := flag.NewFlagSet("sell push", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
+	assumeYes := fs.Bool("yes", false, "skip confirmation prompts (for scripts; implies consent to publish the author field as written)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -443,11 +446,18 @@ func runSellPush(args []string) error {
 		return missingManifestError(err, "")
 	}
 	if issues := client.ManifestIssues(m); len(issues) > 0 {
-		fmt.Fprintf(os.Stderr, "refusing to push: %s still has template values:\n", client.ManifestFilename)
+		fmt.Fprintf(os.Stderr, "refusing to push: %s isn't ready:\n", client.ManifestFilename)
 		for _, issue := range issues {
 			fmt.Fprintln(os.Stderr, "  - "+issue)
 		}
 		return fmt.Errorf("edit %s and try again", client.ManifestFilename)
+	}
+
+	// Checked after the manifest is otherwise valid but before anything is
+	// sent: this is the last point at which the email in the author field
+	// is still private.
+	if err := confirmPublishAuthor(newPrompter(), m.Author, *assumeYes); err != nil {
+		return err
 	}
 
 	token, err := requireSellerToken()
@@ -463,17 +473,24 @@ func runSellPush(args []string) error {
 
 	fmt.Println(successStyle.Render("Pushed " + app.ID))
 	fmt.Printf("  name:     %s\n", app.Name)
-	fmt.Printf("  price:    $%.2f\n", float64(app.PriceUSDCents)/100)
+	fmt.Printf("  price:    %s\n", formatPriceOrWare(int64(app.PriceUSDCents), app.Ware))
 	fmt.Printf("  homepage: %s\n", app.Homepage)
 	fmt.Println(mutedStyle.Render("Claimed and buyable by exact name; appearing in the browse catalog is curated by the platform."))
+
+	if app.PriceUSDCents == 0 {
+		// A ware-only listing has no Stripe leg, so the payouts nag below
+		// would be noise. Say what the listing does ask for instead.
+		fmt.Println(mutedStyle.Render(fmt.Sprintf(
+			"Free — no payment, no Stripe needed. Buyers see your %s ask instead.",
+			client.WareOrDefault(app.Ware))))
+		return nil
+	}
 
 	// Best-effort payouts hint: never auto-launch the browser here — pushing
 	// a manifest shouldn't pop a Stripe tab as a surprise side effect. If the
 	// status check fails, just skip the hint rather than failing the push.
-	if app.PriceUSDCents > 0 {
-		if me, err := c.GetSellerMe(context.Background(), token); err == nil && !me.ChargesEnabled {
-			fmt.Println(mutedStyle.Render("This app is priced but payouts aren't set up yet — run `omarket sell payouts` to get paid."))
-		}
+	if me, err := c.GetSellerMe(context.Background(), token); err == nil && !me.ChargesEnabled {
+		fmt.Println(mutedStyle.Render("This app is priced but payouts aren't set up yet — run `omarket sell payouts` to get paid."))
 	}
 	return nil
 }

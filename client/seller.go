@@ -12,6 +12,11 @@ import (
 // seller-facing contract). It is a distinct shape from App: App is the
 // /api/catalog.json buy-flow view, AppPublic is what sellers see
 // when claiming and editing an app.
+//
+// Ware/Comment/Author come back from the server on every seller response.
+// Ware in particular is not decoration here: for an app priced at zero it
+// is the only meaningful thing to show where a price would go, so `sell
+// status` and `sell push` can say "postcardware" instead of "$0.00".
 type AppPublic struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
@@ -19,6 +24,9 @@ type AppPublic struct {
 	Homepage      string `json:"homepage"`
 	PriceUSDCents int    `json:"price_usd_cents"`
 	Listed        bool   `json:"listed"`
+	Ware          string `json:"ware"`
+	Comment       string `json:"comment"`
+	Author        string `json:"author"`
 }
 
 // SellerAccount is the response to POST /api/sellers.
@@ -34,6 +42,34 @@ type SellerMe struct {
 	ChargesEnabled bool        `json:"charges_enabled"`
 	OnboardingURL  string      `json:"onboarding_url"`
 	Apps           []AppPublic `json:"apps"`
+}
+
+// SellerAppStat is one app's line in a seller's sales summary.
+//
+// Licenses counts completed purchases: keys that actually exist. An
+// abandoned checkout is not a sale and is not counted. A ware-only app's
+// acquisitions do count — for a listing with no price, "how many people
+// took it" is the only number there is.
+//
+// GrossUSDCents is the server's estimate of what the listing has taken in
+// before any fees, computed from the app's current price. It is gross, not
+// earnings: Stripe's dashboard is the authority on money that moved.
+type SellerAppStat struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	PriceUSDCents int    `json:"price_usd_cents"`
+	Ware          string `json:"ware"`
+	Listed        bool   `json:"listed"`
+	Licenses      int64  `json:"licenses"`
+	GrossUSDCents int64  `json:"gross_usd_cents"`
+}
+
+// SellerStats is the response to GET /api/sellers/stats.
+type SellerStats struct {
+	SellerID           string          `json:"seller_id"`
+	Apps               []SellerAppStat `json:"apps"`
+	TotalLicenses      int64           `json:"total_licenses"`
+	TotalGrossUSDCents int64           `json:"total_gross_usd_cents"`
 }
 
 // PayoutsAccount is the response to POST /api/sellers/payouts.
@@ -82,6 +118,23 @@ func (c *Client) getSellerMe(ctx context.Context, httpClient *http.Client, selle
 	var out SellerMe
 	if err := c.doJSONWith(ctx, httpClient, http.MethodGet, path, sellerToken, nil, &out); err != nil {
 		return SellerMe{}, err
+	}
+	return out, nil
+}
+
+// GetSellerStats fetches how many licenses each of the authenticated
+// seller's apps has produced: GET /api/sellers/stats.
+//
+// Deliberately separate from GetSellerMe rather than more fields on it: /me
+// makes live Stripe calls on every request, and a seller checking their
+// numbers has no reason to pay for that. Apps is never nil.
+func (c *Client) GetSellerStats(ctx context.Context, sellerToken string) (SellerStats, error) {
+	var out SellerStats
+	if err := c.doJSONAuth(ctx, http.MethodGet, "/api/sellers/stats", sellerToken, nil, &out); err != nil {
+		return SellerStats{}, err
+	}
+	if out.Apps == nil {
+		out.Apps = []SellerAppStat{}
 	}
 	return out, nil
 }

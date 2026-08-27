@@ -90,6 +90,7 @@ func usage() {
     sell testkey [app]                             mint yourself a local test license
     sell payouts                                   set up getting paid: Stripe onboarding in browser
     sell status                                    seller account + app status
+    sell stats                                     licenses sold, per app
   omarket licenses                              list stored license keys, verified status
   omarket verify <key|path|-> [-server <url>]   verify a license key offline (or against a server's key)
   omarket version                               print the version`)
