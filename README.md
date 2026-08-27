@@ -34,7 +34,8 @@ omarket buy hello-shareware # prints a Stripe Checkout URL and QR, polls, writes
 Paid → the license is written to `~/.config/shareware/licenses/<app>.key`.
 It is a file: `SHRW1.payload.sig`, Ed25519-signed. Apps verify it against
 the platform public key baked into the binary — offline, no account, no
-phone-home after purchase.
+phone-home after purchase. [`examples/`](examples) shows how, in four
+languages.
 
 ```bash
 omarket                # TUI — browse, enter for detail, b to buy, i to install
@@ -67,12 +68,36 @@ buyable by exact name immediately; the browse catalog is curated by the
 platform. The fee is a flat 5%, public via `GET /api/catalog`, and Stripe's
 processing fee comes out of the platform's side.
 
+## Check licenses in your app
+
+Your app is not required to be written in Go — a `SHRW1` key is a signed
+string, and verifying one is base64url-decode, Ed25519-verify, parse JSON,
+check the app id. [`examples/`](examples) has the same tiny shareware app
+four times over:
+
+| | build | crypto |
+|---|---|---|
+| [`examples/c`](examples/c) | `make` | OpenSSL `libcrypto` |
+| [`examples/go`](examples/go) | `go build ./examples/go` | the `license` package |
+| [`examples/rust`](examples/rust) | `cargo build --release` | `ed25519-dalek` |
+| [`examples/ruby`](examples/ruby) | none | stdlib `openssl` |
+
+They print the same report and turn away the same keys, so diffing any two
+shows the language and not much else. A demo keypair ships alongside them, so
+you can run one right now:
+
+```bash
+cd examples/c && make demo
+```
+
 ## Packages
 
 - `license/` — the `SHRW1` key format: sign, verify, keygen. Pure stdlib
   `crypto/ed25519`; verification is fully offline. Import this to check
   licenses in your own app.
 - `client/` — catalog fetch, buy flow, license store; what the CLI is built on.
+- `examples/` — reference license checks in C, Go, Rust, and Ruby, plus the
+  demo fixtures they run against.
 
 The license format and API contract live in [`docs/SPEC.md`](docs/SPEC.md).
 
