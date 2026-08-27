@@ -12,8 +12,9 @@ server is [omarket.dev](https://omarket.dev).
 curl -fsSL https://raw.githubusercontent.com/aphexddb/omarket/master/install-omarchy | bash
 ```
 
-The installer downloads the latest GitHub release and puts the binary in
-`~/.local/bin`. Make sure that's on your `PATH`.
+The installer downloads the latest GitHub release and puts the `omarket`
+binary in `~/.local/bin`. Make sure that's on your `PATH`. It does not
+install omarket itself as an Omarchy or pacman package.
 
 Set `OMARKET_PREFIX` to install somewhere other than `~/.local`, or
 `OMARKET_VERSION` (e.g. `v0.1.0`) to pin a release instead of `latest`.
@@ -38,10 +39,28 @@ phone-home after purchase. [`examples/`](examples) shows how, in four
 languages.
 
 ```bash
-omarket                # TUI: browse, enter for detail, b to buy, i to install
-omarket install <app>  # omarchy pkg add, then pacman, then yay
-omarket licenses       # list stored keys with verified status
+omarket licenses             # list stored keys with verified status
 omarket verify <key|path|->  # re-verify a key offline, any time
+```
+
+## Install an app
+
+Buying a key does not install the software. `i` in the TUI, or
+`omarket install <app>`, installs the catalog app's Arch package
+(`pkgname`):
+
+1. Omarchy first — `omarchy pkg add` (or `omarchy-pkg-add`)
+2. Then pacman — `pacman -S --noconfirm --needed`
+3. Then yay, if neither Omarchy nor pacman is on PATH
+
+Elevation uses Omarchy's polkit dialog (`pkexec`), or `sudo` if pkexec
+isn't there. A miss in the Omarchy repo is not fatal: it falls through
+to pacman. If none of those helpers exist, it prints the command to run
+by hand.
+
+```bash
+omarket                # TUI: browse, enter for detail, b to buy, i to install
+omarket install <app>  # omarchy, then pacman, then yay
 ```
 
 The client talks to `https://omarket.dev` by default; point it at another
