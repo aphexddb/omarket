@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+prefix="${OMARKET_PREFIX:-$HOME/.local}"
+
+if ! command -v omarchy-pkg-add >/dev/null; then
+  printf 'install-omarchy: omarchy-pkg-add is unavailable; this installer requires Omarchy\n' >&2
+  exit 1
+fi
+
+omarchy-pkg-add go
+
+make -C "$repo_dir" build
+install -d "$prefix/bin"
+install -m755 "$repo_dir/omarket" "$prefix/bin/omarket"
+"$prefix/bin/omarket" version

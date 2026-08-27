@@ -6,18 +6,23 @@ works in any terminal.
 Try the binary free. Pay for a key file. Keep the bits. The canonical
 server is [omarket.dev](https://omarket.dev).
 
-## Install
+## Install on Omarchy
 
-Download the latest release for Linux x86_64:
+Clone the repository and run the Omarchy installer:
 
 ```bash
-curl -sL https://github.com/aphexddb/omarket/releases/latest/download/omarket_linux_x86_64.tar.gz | tar xz omarket
-sudo install -m755 omarket /usr/local/bin/omarket
+git clone https://github.com/aphexddb/omarket.git
+cd omarket
+./install-omarchy
 ```
 
-darwin and windows archives (amd64/arm64) are published too — see the
-[latest release](https://github.com/aphexddb/omarket/releases/latest).
-Or build from source:
+The installer uses Omarchy's package helper for Go if it's missing, builds,
+and installs to `~/.local/bin`. Make sure that's on your `PATH`.
+
+Set `OMARKET_PREFIX` before running `install-omarchy` to use a prefix other
+than `~/.local`.
+
+### Other systems
 
 ```bash
 go install github.com/aphexddb/omarket/cmd/omarket@latest
