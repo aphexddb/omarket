@@ -92,7 +92,5 @@ func usage() {
     sell status                                    seller account + app status
   omarket licenses                              list stored license keys, verified status
   omarket verify <key|path|-> [-server <url>]   verify a license key offline (or against a server's key)
-  omarket version                               print the version
-
-  all subcommands accept -server <url> to override the configured server`)
+  omarket version                               print the version`)
 }
