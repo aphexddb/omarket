@@ -24,17 +24,20 @@ omarket verify <key|path|->  # re-verify offline, any time
 Selling — run in this order, once per app:
 
 ```bash
+omarket sell                 # status if a seller token exists, otherwise help
 omarket sell init            # creates a seller account, saves a token
 omarket sell claim <app-id>  # claims the id, writes ./omarket.json
 # edit omarket.json: name, description, price_usd_cents, ware, comment, author
 omarket sell push            # publishes it; refuses template placeholders
 omarket sell testkey         # mints a kind:"test" license so you can test
 omarket sell payouts         # Stripe onboarding, when you want the money
+omarket sell status          # seller account + claimed apps
 ```
 
-App id must match `^[a-z0-9-]{3,64}$`. `comment` (3–140 chars) and `author`
-are required; `ware` defaults to `shareware`. Default server is
-`https://omarket.dev`; override with `-server` or `OMARKET_SERVER`.
+App id must match `^[a-z0-9-]{3,64}$`. Some names, including `omarket`, are
+reserved. `comment` (3–140 chars) and `author` are required; `ware` defaults
+to `shareware`. Default server is `https://omarket.dev`; override with
+`-server` or `OMARKET_SERVER`.
 
 ## Adding a license check to an app
 

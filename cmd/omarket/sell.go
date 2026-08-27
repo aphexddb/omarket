@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/aphexddb/omarket/client"
@@ -27,9 +28,16 @@ var (
 
 func runSell(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|payouts|status>")
+		if client.HasSellerToken() {
+			return runSellStatus(nil)
+		}
+		printSellUsage()
+		return nil
 	}
 	switch args[0] {
+	case "-h", "--help", "help":
+		printSellUsage()
+		return nil
 	case "init":
 		return runSellInit(args[1:])
 	case "claim":
@@ -43,8 +51,91 @@ func runSell(args []string) error {
 	case "status":
 		return runSellStatus(args[1:])
 	default:
-		return fmt.Errorf("usage: omarket sell <init|claim|push|testkey|payouts|status>")
+		printSellUsage()
+		return fmt.Errorf("unknown sell command %q", args[0])
 	}
+}
+
+// sellAppIDRule is the id constraint plus the reserved-name gotcha that
+// ValidateAppID cannot check locally (the reserved list is server-side).
+const sellAppIDRule = `app id: 3-64 characters, lowercase letters, digits, and hyphens
+(no leading or trailing hyphen). Some names, including "omarket", are reserved.`
+
+func printSellUsage() {
+	fmt.Fprintln(os.Stderr, `usage: omarket sell <init|claim|push|testkey|payouts|status>
+  init                 start selling: instant, no Stripe needed
+  claim <app-id>       claim an app id, writes ./omarket.json
+  push                 push omarket.json (name/description/price)
+  testkey [app]        mint yourself a local test license
+  payouts              set up getting paid: Stripe onboarding in browser
+  status               seller account + app status
+
+With no subcommand, prints this help, or seller status if a seller account already exists.
+
+`+sellAppIDRule)
+}
+
+func printSellClaimUsage() {
+	fmt.Fprintln(os.Stderr, "usage: omarket sell claim <app-id>")
+	fmt.Fprintln(os.Stderr, sellAppIDRule)
+}
+
+func wantsHelpFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+// sellAPIError turns a failed seller API call into a sentence that does not
+// leak method, path, or status code. Buy already does this; sell used to
+// wrap *HTTPError and print "POST /api/apps: ... (status 409)".
+func sellAPIError(action string, err error) error {
+	var herr *client.HTTPError
+	if !errors.As(err, &herr) {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	msg := strings.TrimSpace(herr.Message)
+	if msg == "" {
+		msg = fmt.Sprintf("server returned HTTP %d", herr.StatusCode)
+	}
+	if advice := herr.Advice(); advice != "" {
+		return fmt.Errorf("%s: %s — %s", action, msg, advice)
+	}
+	return fmt.Errorf("%s: %s", action, msg)
+}
+
+// claimError special-cases 409 so a reserved or taken id is a next step,
+// not an HTTP dump. Other statuses go through sellAPIError.
+func claimError(id string, err error) error {
+	var herr *client.HTTPError
+	if errors.As(err, &herr) && herr.StatusCode == http.StatusConflict {
+		lower := strings.ToLower(herr.Message)
+		switch {
+		case strings.Contains(lower, "reserved"):
+			return fmt.Errorf("%q is reserved by the platform; pick another id (3-64 characters, lowercase letters, digits, and hyphens)", id)
+		case strings.Contains(lower, "taken") || strings.Contains(lower, "already"):
+			return fmt.Errorf("%q is already claimed", id)
+		default:
+			return fmt.Errorf("%q is taken or reserved; pick another id", id)
+		}
+	}
+	return sellAPIError(fmt.Sprintf("claiming %q", id), err)
+}
+
+func missingManifestError(err error, extra string) error {
+	if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("reading %s: %w", client.ManifestFilename, err)
+	}
+	if extra != "" {
+		return fmt.Errorf("no %s here — run `omarket sell claim <app-id>` first, or %s", client.ManifestFilename, extra)
+	}
+	return fmt.Errorf("no %s here — run `omarket sell claim <app-id>` first", client.ManifestFilename)
 }
 
 // runSellInit creates a seller account and saves its token (or reports the
@@ -68,7 +159,7 @@ func runSellInit(args []string) error {
 		fmt.Println(mutedStyle.Render("seller account already initialized; checking status..."))
 		me, err := c.GetSellerMe(context.Background(), tok)
 		if err != nil {
-			return fmt.Errorf("fetching seller status: %w", err)
+			return sellAPIError("fetching seller status", err)
 		}
 		printSellerStatus(me)
 		printSellNextSteps()
@@ -77,7 +168,7 @@ func runSellInit(args []string) error {
 
 	acct, err := c.CreateSeller(context.Background())
 	if err != nil {
-		return fmt.Errorf("creating seller account: %w", err)
+		return sellAPIError("creating seller account", err)
 	}
 	if err := client.SaveSellerToken(acct.SellerToken); err != nil {
 		return fmt.Errorf("saving seller token: %w", err)
@@ -131,7 +222,7 @@ func runSellPayouts(args []string) error {
 			fmt.Println(mutedStyle.Render("This server doesn't have payouts configured."))
 			return nil
 		}
-		return fmt.Errorf("starting payouts: %w", err)
+		return sellAPIError("starting payouts", err)
 	}
 
 	if acct.OnboardingURL == "" {
@@ -165,7 +256,7 @@ func runSellStatus(args []string) error {
 	if !*wait {
 		me, err := c.GetSellerMe(context.Background(), token)
 		if err != nil {
-			return fmt.Errorf("fetching seller status: %w", err)
+			return sellAPIError("fetching seller status", err)
 		}
 		printSellerStatus(me)
 		return nil
@@ -179,7 +270,7 @@ func runSellStatus(args []string) error {
 		if errors.Is(err, context.Canceled) {
 			return nil
 		}
-		return fmt.Errorf("fetching seller status: %w", err)
+		return sellAPIError("fetching seller status", err)
 	}
 	printSellerStatus(me)
 	return nil
@@ -258,13 +349,18 @@ func sellerHasPricedApp(me client.SellerMe) bool {
 }
 
 func runSellClaim(args []string) error {
+	if wantsHelpFlag(args) {
+		printSellClaimUsage()
+		return nil
+	}
 	fs := flag.NewFlagSet("sell claim", flag.ExitOnError)
 	server := fs.String("server", "", "market server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: omarket sell claim <app-id>")
+		printSellClaimUsage()
+		return fmt.Errorf("missing app id")
 	}
 	id := fs.Arg(0)
 	if err := client.ValidateAppID(id); err != nil {
@@ -279,7 +375,7 @@ func runSellClaim(args []string) error {
 	c := client.NewClient(client.ResolveServer(*server))
 	app, err := c.ClaimApp(context.Background(), token, id)
 	if err != nil {
-		return fmt.Errorf("claiming %q: %w", id, err)
+		return claimError(id, err)
 	}
 
 	// Only pre-fill the author field with something already meant to be
@@ -344,7 +440,7 @@ func runSellPush(args []string) error {
 
 	m, err := client.ReadManifest(client.ManifestFilename)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w (run `omarket sell claim <app-id>` first)", client.ManifestFilename, err)
+		return missingManifestError(err, "")
 	}
 	if issues := client.ManifestIssues(m); len(issues) > 0 {
 		fmt.Fprintf(os.Stderr, "refusing to push: %s still has template values:\n", client.ManifestFilename)
@@ -362,7 +458,7 @@ func runSellPush(args []string) error {
 	c := client.NewClient(client.ResolveServer(*server))
 	app, err := c.PushApp(context.Background(), token, m)
 	if err != nil {
-		return fmt.Errorf("pushing %s: %w", m.ID, err)
+		return sellAPIError("pushing "+m.ID, err)
 	}
 
 	fmt.Println(successStyle.Render("Pushed " + app.ID))
@@ -393,7 +489,7 @@ func runSellTestkey(args []string) error {
 	if id == "" {
 		m, err := client.ReadManifest(client.ManifestFilename)
 		if err != nil {
-			return fmt.Errorf("reading %s: %w (pass an app id, or run this from a directory with a claimed app)", client.ManifestFilename, err)
+			return missingManifestError(err, "pass the app id: `omarket sell testkey <app-id>`")
 		}
 		id = m.ID
 	}
@@ -409,7 +505,7 @@ func runSellTestkey(args []string) error {
 	c := client.NewClient(client.ResolveServer(*server))
 	key, err := c.CreateTestLicense(context.Background(), token, id)
 	if err != nil {
-		return fmt.Errorf("creating test license: %w", err)
+		return sellAPIError("creating test license", err)
 	}
 
 	pub, err := resolvePublicKey()
