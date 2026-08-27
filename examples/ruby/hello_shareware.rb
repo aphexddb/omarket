@@ -8,13 +8,23 @@
 # belongs to this app. No account, no activation call, no phone-home:
 # everything below runs with the network unplugged.
 #
-# Stdlib only — openssl, json, base64. No gems, no Gemfile, no Ruby newer
-# than 2.6.
+# openssl and json are still default gems. base64 is not, as of Ruby 3.4 —
+# the sibling Gemfile pins it. Ruby 2.6 or newer.
 #
+#   bundle install
 #   ruby hello_shareware.rb
 #   ruby hello_shareware.rb ../testdata/hello-shareware.key
 
-require "base64"
+begin
+  require "bundler/setup" if File.file?(File.expand_path("Gemfile", __dir__))
+rescue LoadError
+end
+
+begin
+  require "base64"
+rescue LoadError
+  abort "hello_shareware.rb needs the base64 gem. From examples/ruby: bundle install"
+end
 require "json"
 require "openssl"
 

@@ -1,17 +1,22 @@
 # hello-shareware — Ruby
 
-[`hello_shareware.rb`](hello_shareware.rb), stdlib only. No gems, no Gemfile,
-no bundler, no build step. Ruby 2.6 or newer.
+[`hello_shareware.rb`](hello_shareware.rb). openssl and json are default gems;
+`base64` is not, as of Ruby 3.4. The [Gemfile](Gemfile) pins `base64` at
+`0.3.0`. Ruby 2.6 or newer.
 
 ```bash
+bundle install
 ruby hello_shareware.rb
-ruby hello_shareware.rb ../testdata/hello-shareware.key
+SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
+  ruby hello_shareware.rb ../testdata/hello-shareware.key
+make demo
 ```
 
 ## Dropping it into your app
 
 Copy `verify_license`, `ed25519_public_key`, and the `ED25519_SPKI_PREFIX`
-constant. Change `APP_ID`.
+constant. Change `APP_ID`. Add `gem "base64", "0.3.0"` to your Gemfile if
+you are on Ruby 3.4 or newer.
 
 ```ruby
 lic = verify_license(File.read(path).strip, PLATFORM_PUBLIC_KEY)
@@ -38,7 +43,9 @@ load-bearing; without it any omarket license unlocks your app. See
   here is an error, not a hardening.
 - **`Base64.urlsafe_decode64` handles missing padding** as of Ruby 2.3, which
   is what SHRW1 segments have. `strict_decode64` is the right call for the
-  public key, which is padded standard base64.
+  public key, which is padded standard base64. Ruby 3.4 extracted the `base64`
+  default gem; this directory's Gemfile pins `0.3.0` so `bundle install` is
+  enough.
 - **The verify happens on the decoded string**, not on
   `JSON.generate(JSON.parse(payload))`. Ruby preserves insertion order today;
   betting your licensing on that is a bad trade.

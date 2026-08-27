@@ -6,8 +6,11 @@ signature check, and [`main.go`](main.go) is mostly the app around it.
 
 ```bash
 go run ./examples/go
-go run ./examples/go ../testdata/hello-shareware.key
+SHAREWARE_PUBLIC_KEY=$(cat examples/testdata/demo.pub) \
+  go run ./examples/go examples/testdata/hello-shareware.key
 ```
+
+From `examples/go`, `make demo` runs the valid, tampered, and wrong-app keys.
 
 From this repo it builds as-is — it is part of the root module, so `go build
 ./...` and CI cover it. In your own project:

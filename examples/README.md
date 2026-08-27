@@ -8,8 +8,8 @@ when the key is genuine and belongs to it.
 |---|---|---|---|
 | [c/](c) | `make` | OpenSSL `libcrypto` | the spec, spelled out byte by byte |
 | [go/](go) | `go build ./examples/go` | the repo's [`license`](../license) package | four lines and you're done |
-| [rust/](rust) | `cargo build --release` | `ed25519-dalek` | typed errors, no panics |
-| [ruby/](ruby) | none — `ruby hello_shareware.rb` | stdlib `openssl` | no gems, no Gemfile |
+| [rust/](rust) | `cargo build --locked --release` | `ed25519-dalek` | typed errors, no panics |
+| [ruby/](ruby) | `bundle install` | stdlib `openssl` + pinned `base64` gem | one file after the Gemfile |
 
 They print the same report and turn away the same keys, so diffing any two
 shows you the language and not much else.
@@ -18,6 +18,12 @@ shows you the language and not much else.
 
 No purchase, no server, no network. `testdata/` holds a throwaway keypair and
 a license signed with it:
+
+```bash
+make examples          # C, Go, Rust, Ruby against testdata; pinned deps
+```
+
+Or one language:
 
 ```bash
 cd examples/c && make demo
@@ -30,12 +36,12 @@ cd examples/go && SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
 
 ```bash
 cd examples/rust && SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
-  cargo run -- ../testdata/hello-shareware.key
+  cargo run --locked -- ../testdata/hello-shareware.key
 ```
 
 ```bash
-cd examples/ruby && SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
-  ruby hello_shareware.rb ../testdata/hello-shareware.key
+cd examples/ruby && bundle install && SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
+  bundle exec ruby hello_shareware.rb ../testdata/hello-shareware.key
 ```
 
 Point any of them at `../testdata/tampered.key` or `../testdata/other-app.key`

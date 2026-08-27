@@ -5,12 +5,15 @@ user can influence. Every failure is a `LicenseError` variant that turns into
 one line of nag text.
 
 ```bash
-cargo run
-cargo run -- ../testdata/hello-shareware.key
-cargo build --release
+cargo run --locked
+SHAREWARE_PUBLIC_KEY=$(cat ../testdata/demo.pub) \
+  cargo run --locked -- ../testdata/hello-shareware.key
+make demo
+cargo build --locked --release
 ```
 
-`Cargo.lock` is committed, as it should be for a binary.
+`Cargo.lock` is committed, as it should be for a binary. Direct crate versions
+in `Cargo.toml` are pinned to that lockfile; `--locked` refuses drift.
 
 ## Dropping it into your app
 

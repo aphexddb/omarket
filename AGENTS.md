@@ -111,8 +111,9 @@ valid, a tampered, and a wrong-app key handled.
 ## Working in this repo
 
 ```bash
-make build   # go build -o omarket ./cmd/omarket
-make test    # go test ./...
+make build     # go build -o omarket ./cmd/omarket
+make test      # go test ./...
+make examples  # C, Go, Rust, Ruby against examples/testdata
 ```
 
 `license/` is the key format, `client/` is the CLI's guts, `cmd/omarket/` is

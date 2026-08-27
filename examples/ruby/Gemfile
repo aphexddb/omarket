@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+# Ruby 3.4 extracted `base64` from the default gems. Pin the replacement so
+# `bundle install` is enough on any Ruby this example still supports (2.6+).
+gem "base64", "0.3.0"

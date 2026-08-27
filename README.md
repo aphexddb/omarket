@@ -79,14 +79,15 @@ four times over:
 |---|---|---|
 | [`examples/c`](examples/c) | `make` | OpenSSL `libcrypto` |
 | [`examples/go`](examples/go) | `go build ./examples/go` | the `license` package |
-| [`examples/rust`](examples/rust) | `cargo build --release` | `ed25519-dalek` |
-| [`examples/ruby`](examples/ruby) | none | stdlib `openssl` |
+| [`examples/rust`](examples/rust) | `cargo build --locked --release` | `ed25519-dalek` |
+| [`examples/ruby`](examples/ruby) | `bundle install` | stdlib `openssl` + pinned `base64` |
 
 They print the same report and turn away the same keys, so diffing any two
 shows the language and not much else. A demo keypair ships alongside them, so
 you can run one right now:
 
 ```bash
+make examples          # C, Go, Rust, Ruby against testdata
 cd examples/c && make demo
 ```
 

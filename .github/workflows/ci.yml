@@ -53,3 +53,34 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ steps.version.outputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: goreleaser release --snapshot --clean
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        run: |
+          curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
+          mkdir -p "$HOME/.local"
+          rm -rf "$HOME/.local/go"
+          tar -C "$HOME/.local" -xzf /tmp/go.tgz
+          echo "$HOME/.local/go/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler: "2.5.23"
+          bundler-cache: true
+          working-directory: examples/ruby
+
+      - name: Install libssl
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Run examples
+        run: make examples
