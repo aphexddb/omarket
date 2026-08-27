@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/aphexddb/omarket/client"
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,10 +13,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// runTUI launches the full-screen catalog browser. If the user requests an
-// install or buy from within the TUI, it exits cleanly first and the action
-// is then carried out via the plain-terminal subcommands (buy needs a QR
-// code and live progress, install may need sudo's prompt).
+// runTUI launches the full-screen catalog browser. Install stays in the
+// TUI and uses Omarchy's polkit dialog for sudo. Buy is started inside
+// the TUI so a failed checkout stays on the status line; only a live
+// Checkout URL leaves alt-screen, for the QR + poll.
 func runTUI() error {
 	server := client.ResolveServer("")
 	m := newModel(server)
@@ -29,18 +31,13 @@ func runTUI() error {
 	if !ok {
 		return nil
 	}
-	if fm.err != nil {
-		return fm.err
-	}
 	if fm.action == nil {
 		return nil
 	}
 
 	switch fm.action.kind {
-	case "install":
-		return runInstall([]string{fm.action.app})
 	case "buy":
-		return runBuy([]string{fm.action.app})
+		return runCheckout(fm.server, fm.action.app, fm.action.checkoutURL, fm.action.token)
 	}
 	return nil
 }
@@ -53,8 +50,10 @@ const (
 )
 
 type tuiAction struct {
-	kind string // "install" or "buy"
-	app  string
+	kind        string // "buy" leaves the TUI for QR checkout
+	app         string
+	checkoutURL string
+	token       string
 }
 
 type catalogMsg struct {
@@ -62,10 +61,53 @@ type catalogMsg struct {
 	err  error
 }
 
+type buyResultMsg struct {
+	app         string
+	checkoutURL string
+	token       string
+	err         error
+}
+
+type installResultMsg struct {
+	app     string
+	pkg     string
+	via     string
+	ok      string
+	err     error
+	tryNext string // "pacman" after an omarchy miss
+}
+
+// tuiInstallVia names the first install helper for the status line.
+// Tests stub this so they don't depend on the host PATH.
+var tuiInstallVia = client.InstallVia
+
 func fetchCatalogCmd(c *client.Client) tea.Cmd {
 	return func() tea.Msg {
 		apps, err := c.GetCatalog(context.Background())
 		return catalogMsg{apps: apps, err: err}
+	}
+}
+
+func startBuyCmd(server, appID string) tea.Cmd {
+	return func() tea.Msg {
+		checkoutURL, token, err := client.NewClient(server).Buy(context.Background(), appID, "")
+		if err != nil {
+			return buyResultMsg{app: appID, err: buyStartError(appID, err)}
+		}
+		return buyResultMsg{app: appID, checkoutURL: checkoutURL, token: token}
+	}
+}
+
+func startInstallCmd(appID, pkgname, via string) tea.Cmd {
+	return func() tea.Msg {
+		msg, err := client.InstallOnce(nil, pkgname, via)
+		if err != nil {
+			if via == "omarchy" && client.IsMissingPackage(err) && client.HasHelper(nil, "pacman") {
+				return installResultMsg{app: appID, pkg: pkgname, via: via, tryNext: "pacman"}
+			}
+			return installResultMsg{app: appID, pkg: pkgname, via: via, err: err}
+		}
+		return installResultMsg{app: appID, pkg: pkgname, via: via, ok: msg}
 	}
 }
 
@@ -87,7 +129,19 @@ type model struct {
 	state  viewState
 	detail *client.App
 
-	err    error
+	// loadErr is a failed catalog fetch. It is shown in the list body, not
+	// as a process-killing crash; r retries.
+	loadErr error
+	// notice is a recoverable status-line message (buy/install failed, etc).
+	// esc dismisses it. The catalog stays on screen.
+	notice   string
+	noticeOK bool // true = success (green), false = error (red)
+	// buying / installing are in-flight app ids. Empty = idle.
+	buying     string
+	installing string
+	installVia string
+	installPkg string
+
 	action *tuiAction
 
 	width, height int
@@ -109,11 +163,55 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case catalogMsg:
 		if msg.err != nil {
-			m.err = msg.err
+			m.loadErr = msg.err
+			m.notice = "Couldn't load the catalog"
 			return m, nil
 		}
+		m.loadErr = nil
 		m.apps = msg.apps
 		m.applyFilter()
+		return m, nil
+
+	case buyResultMsg:
+		m.buying = ""
+		if msg.err != nil {
+			m.notice = msg.err.Error()
+			m.noticeOK = false
+			return m, nil
+		}
+		m.action = &tuiAction{
+			kind:        "buy",
+			app:         msg.app,
+			checkoutURL: msg.checkoutURL,
+			token:       msg.token,
+		}
+		return m, tea.Quit
+
+	case installResultMsg:
+		if msg.tryNext != "" {
+			m.installing = msg.app
+			if msg.pkg != "" {
+				m.installPkg = msg.pkg
+			}
+			m.installVia = msg.tryNext
+			m.notice = ""
+			m.noticeOK = false
+			pkg := m.installPkg
+			if pkg == "" {
+				pkg = msg.app
+			}
+			return m, startInstallCmd(msg.app, pkg, msg.tryNext)
+		}
+		m.installing = ""
+		m.installVia = ""
+		m.installPkg = ""
+		if msg.err != nil {
+			m.notice = msg.err.Error()
+			m.noticeOK = false
+			return m, nil
+		}
+		m.notice = msg.ok
+		m.noticeOK = true
 		return m, nil
 
 	case tea.KeyMsg:
@@ -122,7 +220,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) busy() bool { return m.buying != "" || m.installing != "" }
+
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.busy() {
+		switch msg.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	if m.notice != "" && msg.String() == "esc" {
+		m.notice = ""
+		m.noticeOK = false
+		return m, nil
+	}
 	if m.filtering {
 		return m.handleFilterKey(msg)
 	}
@@ -177,16 +289,16 @@ func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.detail = a
 			m.state = stateDetail
 		}
+	case "r":
+		if m.loadErr != nil {
+			m.notice = ""
+			m.loadErr = nil
+			return *m, fetchCatalogCmd(client.NewClient(m.server))
+		}
 	case "i":
-		if a, ok := m.selected(); ok {
-			m.action = &tuiAction{kind: "install", app: a.ID}
-			return *m, tea.Quit
-		}
+		return m.beginInstall()
 	case "b":
-		if a, ok := m.selected(); ok && !a.Free() {
-			m.action = &tuiAction{kind: "buy", app: a.ID}
-			return *m, tea.Quit
-		}
+		return m.beginBuy()
 	}
 	return *m, nil
 }
@@ -199,15 +311,49 @@ func (m *model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+c":
 		return *m, tea.Quit
 	case "i":
-		m.action = &tuiAction{kind: "install", app: m.detail.ID}
-		return *m, tea.Quit
+		return m.beginInstall()
 	case "b":
-		if !m.detail.Free() {
-			m.action = &tuiAction{kind: "buy", app: m.detail.ID}
-			return *m, tea.Quit
-		}
+		return m.beginBuy()
 	}
 	return *m, nil
+}
+
+func (m *model) selectedApp() (*client.App, bool) {
+	if m.state == stateDetail && m.detail != nil {
+		return m.detail, true
+	}
+	return m.selected()
+}
+
+func (m *model) beginBuy() (tea.Model, tea.Cmd) {
+	a, ok := m.selectedApp()
+	if !ok || a.Free() {
+		return *m, nil
+	}
+	m.notice = ""
+	m.noticeOK = false
+	m.buying = a.ID
+	return *m, startBuyCmd(m.server, a.ID)
+}
+
+func (m *model) beginInstall() (tea.Model, tea.Cmd) {
+	a, ok := m.selectedApp()
+	if !ok {
+		return *m, nil
+	}
+	pkg := a.Pkgname
+	if pkg == "" {
+		pkg = a.ID
+	}
+	m.notice = ""
+	m.noticeOK = false
+	m.installing = a.ID
+	m.installPkg = pkg
+	m.installVia = tuiInstallVia(nil)
+	if m.installVia == "" || m.installVia == "package manager" {
+		m.installVia = "omarchy"
+	}
+	return *m, startInstallCmd(a.ID, pkg, m.installVia)
 }
 
 // applyFilter recomputes m.filtered from m.apps and m.filterQuery (a
@@ -282,13 +428,56 @@ func (m model) selected() (*client.App, bool) {
 }
 
 func (m model) View() string {
-	if m.err != nil {
-		return errorStyle.Render(fmt.Sprintf("error: %v", m.err)) + "\n\n" + helpStyle.Render("q to quit")
-	}
 	if m.state == stateDetail && m.detail != nil {
 		return docStyle.Render(m.renderDetail())
 	}
 	return docStyle.Render(m.renderList())
+}
+
+// formatNotice turns a buyer-facing error into a status-line sentence:
+// capitalize, and prefer an em dash over the first colon.
+func formatNotice(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if i := strings.Index(s, ": "); i > 0 {
+		s = s[:i] + " — " + s[i+2:]
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	upper := unicode.ToUpper(r)
+	if upper == r {
+		return s
+	}
+	return string(upper) + s[size:]
+}
+
+func (m model) renderFooter(w int, idleHelp, idleRight string) string {
+	switch {
+	case m.installing != "":
+		via := m.installVia
+		if via == "" {
+			via = "omarchy"
+		}
+		left := mutedStyle.Render(truncCell("Installing "+m.installing+" via "+via+"…", max(1, w-6)))
+		return truncCell(splitLine(left, helpStyle.Render("wait"), w), w)
+	case m.buying != "":
+		left := mutedStyle.Render(truncCell("Starting checkout for "+m.buying+"…", max(1, w-6)))
+		return truncCell(splitLine(left, helpStyle.Render("wait"), w), w)
+	case m.notice != "":
+		msg := truncCell(formatNotice(m.notice), max(1, w-4))
+		style := errorStyle
+		if m.noticeOK {
+			style = successStyle
+		}
+		left := style.Render(msg)
+		return truncCell(splitLine(left, helpStyle.Render("esc"), w), w)
+	default:
+		return helpStyle.Render(truncCell(splitLine(idleHelp, idleRight, w), w))
+	}
 }
 
 // padCell right-pads plain text s to w display cells, truncating with an
@@ -415,7 +604,10 @@ func (m model) renderList() string {
 	b.WriteString("  " + mutedStyle.Render(truncCell(header, w-2)) + "\n")
 
 	linesUsed := 0
-	if len(m.apps) == 0 {
+	if m.loadErr != nil && len(m.apps) == 0 {
+		b.WriteString(errorStyle.Render(truncCell("  Couldn't load the catalog. r retries.", w)) + "\n")
+		linesUsed++
+	} else if len(m.apps) == 0 {
 		b.WriteString(mutedStyle.Render("  loading catalog...") + "\n")
 		linesUsed++
 	} else if len(m.filtered) == 0 {
@@ -466,11 +658,14 @@ func (m model) renderList() string {
 	}
 
 	help := "↑/k ↓/j move · enter detail · i install · b buy · / filter · q quit"
+	if m.loadErr != nil && len(m.apps) == 0 {
+		help = "r retry · q quit"
+	}
 	pos := ""
 	if len(m.filtered) > 0 {
 		pos = fmt.Sprintf("%d/%d · ✓ owned", m.cursor+1, len(m.filtered))
 	}
-	b.WriteString(helpStyle.Render(truncCell(splitLine(help, pos, w), w)))
+	b.WriteString(m.renderFooter(w, help, pos))
 	return b.String()
 }
 
@@ -560,6 +755,6 @@ func (m model) renderDetail() string {
 	if !a.Free() && !client.HasLicense(a.ID) {
 		help = "i install · b buy · esc back · q quit"
 	}
-	b.WriteString(helpStyle.Render(truncCell(help, w)))
+	b.WriteString(m.renderFooter(w, help, ""))
 	return b.String()
 }

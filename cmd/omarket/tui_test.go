@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/aphexddb/omarket/client"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -153,6 +155,311 @@ func TestRenderDetailShowsWareTrio(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatNotice(t *testing.T) {
+	got := formatNotice("couldn't buy omarket: this listing isn't accepting payments right now")
+	want := "Couldn't buy omarket — this listing isn't accepting payments right now"
+	if got != want {
+		t.Fatalf("formatNotice = %q, want %q", got, want)
+	}
+}
+
+func TestBuyFailureStaysInTUI(t *testing.T) {
+	m := testModel(80, 24)
+	m.cursor = 1 // paid app
+	next, cmd := m.handleListKey(teaKey("b"))
+	got, ok := next.(model)
+	if !ok {
+		t.Fatalf("handleListKey(b) returned %T", next)
+	}
+	if cmd == nil {
+		t.Fatal("buy should start a command, not quit")
+	}
+	if got.action != nil {
+		t.Fatal("buy must not leave the TUI before checkout starts")
+	}
+	if got.buying != "super-grep-deluxe-professional" {
+		t.Fatalf("buying = %q", got.buying)
+	}
+
+	updated, quit := got.Update(buyResultMsg{
+		app: "super-grep-deluxe-professional",
+		err: buyStartError("omarket", &client.HTTPError{Method: "POST", Path: "/api/buy", StatusCode: 502}),
+	})
+	got = updated.(model)
+	if quit != nil {
+		t.Fatal("a failed buy must not quit the TUI")
+	}
+	if got.action != nil {
+		t.Fatal("a failed buy must not set a post-TUI action")
+	}
+	if got.buying != "" {
+		t.Fatalf("buying still set: %q", got.buying)
+	}
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Couldn't buy omarket") {
+		t.Fatalf("status line missing notice:\n%s", plain)
+	}
+	if !strings.Contains(plain, "this listing isn't accepting payments right now") {
+		t.Fatalf("status line missing reason:\n%s", plain)
+	}
+	if strings.Contains(plain, "error:") {
+		t.Fatalf("status line still has CLI 'error:' prefix:\n%s", plain)
+	}
+	if strings.Contains(plain, "unexpected status") {
+		t.Fatalf("status line leaked HTTP internals:\n%s", plain)
+	}
+
+	cleared, _ := got.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	got = cleared.(model)
+	if got.notice != "" {
+		t.Fatalf("esc should dismiss notice, still %q", got.notice)
+	}
+}
+
+func TestInstallStartsWithOmarchy(t *testing.T) {
+	defer stubInstallVia("omarchy")()
+	m := testModel(80, 24)
+	m.apps[0].Pkgname = "hello-shareware"
+	m.applyFilter()
+
+	next, cmd := m.handleListKey(teaKey("i"))
+	got := mustModel(t, next)
+	if cmd == nil {
+		t.Fatal("install should start a command, not quit")
+	}
+	if got.action != nil {
+		t.Fatal("install must not leave the TUI")
+	}
+	if got.installing != "hello-shareware" {
+		t.Fatalf("installing = %q", got.installing)
+	}
+	if got.installPkg != "hello-shareware" {
+		t.Fatalf("installPkg = %q, want the catalog pkgname", got.installPkg)
+	}
+	if got.installVia != "omarchy" {
+		t.Fatalf("installVia = %q, want omarchy first", got.installVia)
+	}
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Installing hello-shareware via omarchy") {
+		t.Fatalf("status line should say it's using omarchy first:\n%s", plain)
+	}
+	if strings.Contains(plain, "sudo") || strings.Contains(plain, "pacman -S") {
+		t.Fatalf("status line leaked a console install command:\n%s", plain)
+	}
+}
+
+func TestInstallOmarchyMissTriesPacman(t *testing.T) {
+	m := testModel(80, 24)
+	m.installing = "hello-shareware"
+	m.installPkg = "hello-shareware"
+	m.installVia = "omarchy"
+
+	updated, cmd := m.Update(installResultMsg{
+		app:     "hello-shareware",
+		pkg:     "hello-shareware",
+		via:     "omarchy",
+		tryNext: "pacman",
+	})
+	got := mustModel(t, updated)
+	if cmd == nil {
+		t.Fatal("omarchy miss should start a pacman attempt, not stop")
+	}
+	if got.action != nil {
+		t.Fatal("falling through to pacman must not leave the TUI")
+	}
+	if got.installing != "hello-shareware" {
+		t.Fatalf("installing = %q, want still in-flight", got.installing)
+	}
+	if got.installVia != "pacman" {
+		t.Fatalf("installVia = %q, want pacman", got.installVia)
+	}
+	if got.notice != "" {
+		t.Fatalf("should not show an error while retrying via pacman, notice=%q", got.notice)
+	}
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Installing hello-shareware via pacman") {
+		t.Fatalf("status line should show the pacman attempt:\n%s", plain)
+	}
+}
+
+func TestInstallBothMissShowsRepoNotice(t *testing.T) {
+	m := testModel(80, 24)
+	m.installing = "hello-shareware"
+	m.installVia = "pacman"
+
+	updated, quit := m.Update(installResultMsg{
+		app: "hello-shareware",
+		via: "pacman",
+		err: fmt.Errorf("couldn't install hello-shareware: not in the omarchy package repo"),
+	})
+	got := mustModel(t, updated)
+	if quit != nil {
+		t.Fatal("a failed install must not quit the TUI")
+	}
+	if got.installing != "" {
+		t.Fatalf("installing still set: %q", got.installing)
+	}
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Couldn't install hello-shareware") {
+		t.Fatalf("status line missing notice:\n%s", plain)
+	}
+	if !strings.Contains(plain, "not in the omarchy package repo") {
+		t.Fatalf("status line missing reason:\n%s", plain)
+	}
+	if strings.Contains(plain, "pacman install failed") || strings.Contains(plain, "target not found") {
+		t.Fatalf("status line leaked pacman internals:\n%s", plain)
+	}
+}
+
+func TestInstallAuthCanceledDoesNotTryPacman(t *testing.T) {
+	m := testModel(80, 24)
+	m.installing = "hello-shareware"
+	m.installVia = "omarchy"
+
+	updated, cmd := m.Update(installResultMsg{
+		app: "hello-shareware",
+		via: "omarchy",
+		err: fmt.Errorf("couldn't install hello-shareware: authentication canceled"),
+	})
+	got := mustModel(t, updated)
+	if cmd != nil {
+		t.Fatal("dismissing the polkit dialog must not start pacman")
+	}
+	if got.installing != "" {
+		t.Fatalf("installing still set: %q", got.installing)
+	}
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "authentication canceled") {
+		t.Fatalf("status line missing cancel notice:\n%s", plain)
+	}
+}
+
+func TestInstallBusyIgnoresSecondI(t *testing.T) {
+	m := testModel(80, 24)
+	m.installing = "hello-shareware"
+	m.installVia = "omarchy"
+	next, cmd := m.handleKey(teaKey("i"))
+	got := mustModel(t, next)
+	if cmd != nil {
+		t.Fatal("a second i while installing must not start another command")
+	}
+	if got.installing != "hello-shareware" {
+		t.Fatalf("installing = %q", got.installing)
+	}
+}
+
+func TestInstallFromDetailStaysInTUI(t *testing.T) {
+	defer stubInstallVia("omarchy")()
+	m := testModel(80, 24)
+	m.state = stateDetail
+	m.detail = &m.apps[1]
+	next, cmd := m.handleDetailKey(teaKey("i"))
+	got := mustModel(t, next)
+	if cmd == nil {
+		t.Fatal("detail i should start install")
+	}
+	if got.action != nil {
+		t.Fatal("detail install must not leave the TUI")
+	}
+	if got.installing != "super-grep-deluxe-professional" {
+		t.Fatalf("installing = %q", got.installing)
+	}
+	if got.state != stateDetail {
+		t.Fatal("should stay on the detail view")
+	}
+}
+
+func TestInstallSuccessStaysInTUI(t *testing.T) {
+	m := testModel(80, 24)
+	m.installing = "hello-shareware"
+	updated, quit := m.Update(installResultMsg{
+		app: "hello-shareware",
+		ok:  "installed hello-shareware via omarchy",
+	})
+	if quit != nil {
+		t.Fatal("a successful install must not quit the TUI")
+	}
+	got := mustModel(t, updated)
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Installed hello-shareware via omarchy") {
+		t.Fatalf("status line missing success:\n%s", plain)
+	}
+}
+
+func TestInstallProgressFitsWidth(t *testing.T) {
+	m := testModel(40, 24)
+	m.installing = "super-grep-deluxe-professional"
+	m.installVia = "omarchy"
+	for i, line := range strings.Split(m.View(), "\n") {
+		if got := lipgloss.Width(line); got > 40 {
+			t.Errorf("line %d is %d cells: %q", i, got, ansi.Strip(line))
+		}
+	}
+	if got := strings.Count(m.View(), "\n") + 1; got != 24 {
+		t.Errorf("view is %d lines, want 24", got)
+	}
+}
+
+func TestBuyNoticeFitsWidth(t *testing.T) {
+	m := testModel(40, 24)
+	m.cursor = 1
+	m.notice = "couldn't buy omarket: this listing isn't accepting payments right now"
+	for i, line := range strings.Split(m.View(), "\n") {
+		if got := lipgloss.Width(line); got > 40 {
+			t.Errorf("line %d is %d cells: %q", i, got, ansi.Strip(line))
+		}
+	}
+	if got := strings.Count(m.View(), "\n") + 1; got != 24 {
+		t.Errorf("view is %d lines, want 24", got)
+	}
+}
+
+func TestCatalogLoadErrorStaysInChrome(t *testing.T) {
+	m := testModel(80, 24)
+	m.apps = nil
+	m.applyFilter()
+	updated, quit := m.Update(catalogMsg{err: errCatalogDown})
+	if quit != nil {
+		t.Fatal("catalog fetch failure must not quit")
+	}
+	got := updated.(model)
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, "Couldn't load the catalog") {
+		t.Fatalf("missing load error:\n%s", plain)
+	}
+	if strings.HasPrefix(strings.TrimSpace(plain), "error:") {
+		t.Fatalf("full-screen crash view:\n%s", plain)
+	}
+}
+
+func teaKey(s string) tea.KeyMsg {
+	if s == "esc" {
+		return tea.KeyMsg{Type: tea.KeyEsc}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+}
+
+func mustModel(t *testing.T, v tea.Model) model {
+	t.Helper()
+	got, ok := v.(model)
+	if !ok {
+		t.Fatalf("got %T, want model", v)
+	}
+	return got
+}
+
+func stubInstallVia(via string) func() {
+	prev := tuiInstallVia
+	tuiInstallVia = func(client.CommandRunner) string { return via }
+	return func() { tuiInstallVia = prev }
+}
+
+var errCatalogDown = errString("connection refused")
+
+type errString string
+
+func (e errString) Error() string { return string(e) }
 
 func TestFilterMatchesWareAndAuthor(t *testing.T) {
 	m := testModel(80, 24)

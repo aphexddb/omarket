@@ -93,3 +93,81 @@ func TestRunBuyWithArgPurchasesApp(t *testing.T) {
 		t.Fatal("expected the purchased license to be saved to disk")
 	}
 }
+
+func TestRunBuyCheckoutUnavailable(t *testing.T) {
+	// Cloudflare's origin-502 page: no JSON, no Railway headers. This is
+	// the exact body that printed "POST /api/buy: unexpected status 502".
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/buy", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("error code: 502"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	err := runBuy([]string{"-server", srv.URL, "omarket"})
+	if err == nil {
+		t.Fatal("expected buy to fail")
+	}
+	got := err.Error()
+	if got != "couldn't buy omarket: this listing isn't accepting payments right now" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestBuyStartError(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "cloudflare 502",
+			err:  &client.HTTPError{Method: "POST", Path: "/api/buy", StatusCode: 502},
+			want: "couldn't buy omarket: this listing isn't accepting payments right now",
+		},
+		{
+			name: "legacy server 502 json",
+			err: &client.HTTPError{
+				Method: "POST", Path: "/api/buy", StatusCode: 502,
+				Message: "failed to create checkout session",
+			},
+			want: "couldn't buy omarket: this listing isn't accepting payments right now",
+		},
+		{
+			name: "current server 503",
+			err: &client.HTTPError{
+				Method: "POST", Path: "/api/buy", StatusCode: 503,
+				Message: "this listing isn't accepting payments right now",
+			},
+			want: "couldn't buy omarket: this listing isn't accepting payments right now",
+		},
+		{
+			name: "seller no payouts",
+			err: &client.HTTPError{
+				Method: "POST", Path: "/api/buy", StatusCode: 409,
+				Message: "this app's seller hasn't set up payouts yet",
+			},
+			want: "couldn't buy omarket: this app's seller hasn't set up payouts yet",
+		},
+		{
+			name: "unknown app",
+			err:  &client.HTTPError{Method: "POST", Path: "/api/buy", StatusCode: 404, Message: "unknown app"},
+			want: `"nope" isn't in the catalog`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := "omarket"
+			if tc.name == "unknown app" {
+				app = "nope"
+			}
+			got := buyStartError(app, tc.err).Error()
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

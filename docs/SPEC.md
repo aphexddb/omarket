@@ -127,9 +127,10 @@ different shape.
   username, stored bare (`aphexddb`, no `@`).
 - `stripe_account`: the dev's Stripe Connect account id. Required when
   `price_cents > 0`.
-- `pkgname`: Arch package name. `omarket install` runs
-  `sudo pacman -S <pkgname>`, falls back to `yay -S`, and on systems with
-  neither prints the command instead of running it.
+- `pkgname`: Arch package name. `omarket install` prefers `omarchy pkg add
+  <pkgname>` (Arch + the Omarchy package repo, with Omarchy's polkit GUI
+  for sudo), else `pkexec pacman -S --noconfirm --needed`, else `yay -S`.
+  On systems with none of those it prints the command instead of running it.
 - `listed`: optional, seed-file only — it is never served in
   `/api/catalog.json`, and clients never see it. It states whether the app
   belongs in the browse catalog when the server first seeds it; absent, a

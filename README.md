@@ -37,7 +37,7 @@ phone-home after purchase.
 
 ```bash
 omarket                # TUI — browse, enter for detail, b to buy, i to install
-omarket install <app>  # pacman -S (falls back to yay, or prints the command)
+omarket install <app>  # omarchy pkg add, then pacman, then yay
 omarket licenses       # list stored keys with verified status
 omarket verify <key|path|->  # re-verify a key offline, any time
 ```

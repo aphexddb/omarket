@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -41,9 +43,20 @@ func runBuy(args []string) error {
 	c := client.NewClient(client.ResolveServer(*server))
 	checkoutURL, token, err := c.Buy(ctx, appID, *email)
 	if err != nil {
-		return fmt.Errorf("starting purchase: %w", err)
+		return buyStartError(appID, err)
 	}
+	return completePurchase(ctx, c, appID, checkoutURL, token)
+}
 
+// runCheckout finishes a purchase the TUI already started (QR + poll +
+// save). It must not POST /api/buy again — that would open a second session.
+func runCheckout(server, appID, checkoutURL, token string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	return completePurchase(ctx, client.NewClient(server), appID, checkoutURL, token)
+}
+
+func completePurchase(ctx context.Context, c *client.Client, appID, checkoutURL, token string) error {
 	fmt.Println()
 	fmt.Println(checkoutStyle.Render("Checkout: " + checkoutURL))
 	fmt.Println()
@@ -67,6 +80,32 @@ func runBuy(args []string) error {
 	fmt.Println(successStyle.Render("★ Registered! Thanks for supporting the developer. ★"))
 	fmt.Printf("License key saved to %s\n", path)
 	return nil
+}
+
+const buyUnavailableMsg = "this listing isn't accepting payments right now"
+
+// buyStartError turns a failed POST /api/buy into a buyer-facing sentence.
+// Cloudflare rewrites origin 502s into a body-less "error code: 502" page,
+// which is why older builds printed "POST /api/buy: unexpected status 502".
+func buyStartError(appID string, err error) error {
+	var herr *client.HTTPError
+	if !errors.As(err, &herr) {
+		return fmt.Errorf("couldn't buy %s: %w", appID, err)
+	}
+	switch herr.StatusCode {
+	case http.StatusNotFound:
+		return fmt.Errorf("%q isn't in the catalog", appID)
+	case http.StatusConflict, http.StatusBadGateway, http.StatusServiceUnavailable:
+		msg := herr.Message
+		if msg == "" || msg == "failed to create checkout session" {
+			msg = buyUnavailableMsg
+		}
+		return fmt.Errorf("couldn't buy %s: %s", appID, msg)
+	}
+	if herr.Message != "" {
+		return fmt.Errorf("couldn't buy %s: %s", appID, herr.Message)
+	}
+	return fmt.Errorf("couldn't buy %s: %w", appID, err)
 }
 
 // pollUntilComplete polls /api/purchase/{token} every pollInterval, up to
