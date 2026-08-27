@@ -140,6 +140,74 @@ func TestRenderListHeightMatchesTerminal(t *testing.T) {
 	}
 }
 
+func TestRenderThanksOnlyWhenRegistered(t *testing.T) {
+	m := testModel(80, 24)
+	plain := ansi.Strip(m.View())
+	if strings.Contains(plain, thanksForTheBeer) {
+		t.Fatalf("unregistered list should not thank:\n%s", plain)
+	}
+
+	m.registered = true
+	plain = ansi.Strip(m.View())
+	if !strings.Contains(plain, thanksForTheBeer) {
+		t.Fatalf("registered list missing thank-you:\n%s", plain)
+	}
+	if got := strings.Count(m.View(), "\n") + 1; got != 24 {
+		t.Errorf("registered list is %d lines, want 24", got)
+	}
+
+	m.state = stateDetail
+	m.detail = &m.apps[1]
+	plain = ansi.Strip(m.View())
+	if !strings.Contains(plain, thanksForTheBeer) {
+		t.Fatalf("registered detail missing thank-you:\n%s", plain)
+	}
+
+	m.registered = false
+	plain = ansi.Strip(m.View())
+	if strings.Contains(plain, thanksForTheBeer) {
+		t.Fatalf("unregistered detail should not thank:\n%s", plain)
+	}
+}
+
+func TestRenderThanksFitsWidth(t *testing.T) {
+	for _, w := range []int{40, 60, 80, 120} {
+		m := testModel(w, 24)
+		m.registered = true
+		for i, line := range strings.Split(m.View(), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("list width %d: line %d is %d cells: %q", w, i, got, ansi.Strip(line))
+			}
+		}
+		if got := strings.Count(m.View(), "\n") + 1; got != 24 {
+			t.Errorf("list width %d: view is %d lines, want 24", w, got)
+		}
+
+		m.state = stateDetail
+		m.detail = &m.apps[1]
+		for i, line := range strings.Split(m.View(), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("detail width %d: line %d is %d cells: %q", w, i, got, ansi.Strip(line))
+			}
+		}
+	}
+}
+
+func TestEmptyCatalogThanksWhenRegistered(t *testing.T) {
+	m := newModel("https://omarket.dev")
+	m.width, m.height = 80, 24
+	m.registered = true
+	updated, _ := m.Update(catalogMsg{apps: []client.App{}})
+	got := mustModel(t, updated)
+	plain := ansi.Strip(got.View())
+	if !strings.Contains(plain, thanksForTheBeer) {
+		t.Fatalf("registered empty catalog missing thank-you:\n%s", plain)
+	}
+	if n := strings.Count(got.View(), "\n") + 1; n != 24 {
+		t.Errorf("registered empty view is %d lines, want 24", n)
+	}
+}
+
 func TestRenderDetailShowsWareTrio(t *testing.T) {
 	m := testModel(80, 24)
 	m.state = stateDetail

@@ -20,6 +20,7 @@ import (
 func runTUI() error {
 	server := client.ResolveServer("")
 	m := newModel(server)
+	m.registered = selfRegistered()
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
@@ -161,6 +162,10 @@ type model struct {
 
 	action *tuiAction
 	stale  bool // catalog served from the offline disk cache
+
+	// registered is this copy of omarket: a valid SHRW1 key for "omarket"
+	// is on disk. Checked once at launch; unregistered is not an error.
+	registered bool
 
 	width, height int
 }
@@ -422,7 +427,11 @@ func (m *model) moveCursor(delta int) {
 func (m model) visibleRows() int {
 	// docStyle margins (2) + title (1) + filter line (1) + column header (1)
 	// + help (1) reserve 6 lines; every remaining line is a catalog row.
+	// A registered copy adds a thank-you under the help.
 	rows := m.height - 6
+	if m.registered {
+		rows--
+	}
 	if rows < 1 {
 		rows = 1
 	}
@@ -500,6 +509,15 @@ func (m model) renderFooter(w int, idleHelp, idleRight string) string {
 	default:
 		return helpStyle.Render(truncCell(splitLine(idleHelp, idleRight, w), w))
 	}
+}
+
+// renderThanks is the extra last line on a registered copy. Empty when
+// unregistered — shareware nags are a different app's job.
+func (m model) renderThanks(w int) string {
+	if !m.registered {
+		return ""
+	}
+	return "\n" + successStyle.Render(truncCell(thanksForTheBeer, w))
 }
 
 // padCell right-pads plain text s to w display cells, truncating with an
@@ -811,6 +829,7 @@ func (m model) renderList() string {
 		pos = fmt.Sprintf("%d/%d · ✓ owned", m.cursor+1, len(m.filtered))
 	}
 	b.WriteString(m.renderFooter(w, help, pos))
+	b.WriteString(m.renderThanks(w))
 	return b.String()
 }
 
@@ -901,5 +920,6 @@ func (m model) renderDetail() string {
 		help = "i install · b buy · esc back · q quit"
 	}
 	b.WriteString(m.renderFooter(w, help, ""))
+	b.WriteString(m.renderThanks(w))
 	return b.String()
 }
