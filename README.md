@@ -50,11 +50,13 @@ server with `-server` or `OMARKET_SERVER`.
 ## Sell
 
 ```bash
+omarket sell                 # help, or status if a seller account already exists
 omarket sell init            # create a seller account; token written to disk
 omarket sell claim my-app    # claim the id; generates an omarket.json manifest
 omarket sell push            # upload name, description, price, ware from omarket.json
 omarket sell testkey         # mint a test license; your app shows registered
 omarket sell payouts         # Stripe Express onboarding, when you want to get paid
+omarket sell status          # seller account + claimed apps
 omarket sell stats           # licenses sold, per app
 ```
 
