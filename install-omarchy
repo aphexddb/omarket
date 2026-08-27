@@ -10,6 +10,17 @@ if ! command -v omarchy >/dev/null; then
   exit 1
 fi
 
+# omarket also ships as a pacman package, which lands in /usr/bin. This
+# installs into ~/.local/bin, which normally precedes /usr/bin on PATH, so
+# installing over a packaged copy would shadow it and quietly stop tracking
+# pacman updates.
+if command -v pacman >/dev/null 2>&1 && pacman -Qq omarket >/dev/null 2>&1; then
+  printf 'install-omarchy: omarket is already installed via pacman\n' >&2
+  printf 'install-omarchy: installing into %s/bin would shadow it and would not get pacman updates\n' "$prefix" >&2
+  printf 'install-omarchy: run "sudo pacman -Syu omarket" instead, or set OMARKET_FORCE=1 to override\n' >&2
+  [[ -n "${OMARKET_FORCE:-}" ]] || exit 1
+fi
+
 for need in curl tar sha256sum install; do
   if ! command -v "$need" >/dev/null; then
     printf 'install-omarchy: %s is required\n' "$need" >&2
@@ -38,10 +49,22 @@ asset="omarket_${os}_${arch}.tar.gz"
 
 if [[ -n ${OMARKET_RELEASE_BASE:-} ]]; then
   base="${OMARKET_RELEASE_BASE%/}"
-elif [[ "$tag" == "latest" ]]; then
-  base="https://github.com/${repo}/releases/latest/download"
 else
-  [[ "$tag" == v* ]] || tag="v${tag}"
+  if [[ "$tag" == "latest" ]]; then
+    # Resolve "latest" to a concrete tag up front. Pulling the archive and the
+    # checksums from /releases/latest/download as two separate requests races
+    # any release published between them, and would verify one release's
+    # archive against another release's checksums.
+    resolved="$(curl -fsSL --proto '=https' --tlsv1.2 -o /dev/null \
+      -w '%{url_effective}' "https://github.com/${repo}/releases/latest" || true)"
+    tag="${resolved##*/}"
+    if [[ "$tag" != v* ]]; then
+      printf 'install-omarchy: could not resolve the latest release of %s\n' "$repo" >&2
+      exit 1
+    fi
+  else
+    [[ "$tag" == v* ]] || tag="v${tag}"
+  fi
   base="https://github.com/${repo}/releases/download/${tag}"
 fi
 
@@ -61,7 +84,9 @@ printf 'install-omarchy: downloading %s (%s)\n' "$asset" "$tag" >&2
 curl_get "$tmp/$asset" "$base/$asset"
 curl_get "$tmp/checksums.txt" "$base/checksums.txt"
 
-if ! grep -E "[[:space:]]${asset}\$" "$tmp/checksums.txt" | (cd "$tmp" && sha256sum -c -); then
+# Match the filename field exactly; as a grep pattern the asset name's dots
+# would be wildcards.
+if ! awk -v a="$asset" '$2 == a' "$tmp/checksums.txt" | (cd "$tmp" && sha256sum -c -); then
   printf 'install-omarchy: checksum verification failed for %s\n' "$asset" >&2
   exit 1
 fi
